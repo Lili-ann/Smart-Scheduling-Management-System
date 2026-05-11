@@ -8,9 +8,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = htmlspecialchars($_POST['password'] ?? '');
     $role = htmlspecialchars($_POST['role'] ?? '');
 
-    // Placeholder for your signup logic
+    // Password strength validation (sign up only)
+    $passwordErrors = [];
+
+    if (strlen($password) < 8) {
+        $passwordErrors[] = "at least 8 characters";
+    }
+    if (!preg_match('/[A-Z]/', $password)) {
+        $passwordErrors[] = "one uppercase letter";
+    }
+    if (!preg_match('/[a-z]/', $password)) {
+        $passwordErrors[] = "one lowercase letter";
+    }
+    if (!preg_match('/[0-9]/', $password)) {
+        $passwordErrors[] = "one number";
+    }
+    if (!preg_match('/[^a-zA-Z0-9]/', $password)) {
+        $passwordErrors[] = "one special character";
+    }
+
+    // Placeholder for the signup logic ahh
     if (!empty($fullname) && !empty($email) && !empty($password) && !empty($role)) {
-        $message = "Account created for: " . $email . " as " . $role;
+        if (!empty($passwordErrors)) {
+            $message = "Password must include: " . implode(", ", $passwordErrors) . ".";
+        } else {
+            $message = "Account created for: " . $email . " as " . $role;
+        }
     } else {
         $message = "Please fill in all fields.";
     }
