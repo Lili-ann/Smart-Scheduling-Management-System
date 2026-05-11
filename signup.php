@@ -6,16 +6,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $fullname = htmlspecialchars($_POST['fullname'] ?? '');
     $email = htmlspecialchars($_POST['email'] ?? '');
     $password = htmlspecialchars($_POST['password'] ?? '');
-    $confirm_password = htmlspecialchars($_POST['confirm_password'] ?? '');
     $role = htmlspecialchars($_POST['role'] ?? '');
 
     // Placeholder for your signup logic
-    if (!empty($fullname) && !empty($email) && !empty($password) && !empty($confirm_password) && !empty($role)) {
-        if ($password !== $confirm_password) {
-            $message = "Passwords do not match.";
-        } else {
-            $message = "Account created for: " . $email . " as " . $role;
-        }
+    if (!empty($fullname) && !empty($email) && !empty($password) && !empty($role)) {
+        $message = "Account created for: " . $email . " as " . $role;
     } else {
         $message = "Please fill in all fields.";
     }
@@ -203,7 +198,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <option value="User">User</option>
                 </select>
                 <input type="password" name="password" placeholder="Create Password" required>
-                <input type="password" name="confirm_password" placeholder="Confirm Password" required>
                 <button type="submit">SIGN UP</button>
             </form>
             
