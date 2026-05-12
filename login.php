@@ -6,12 +6,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = htmlspecialchars($_POST['email'] ?? '');
     $password = htmlspecialchars($_POST['password'] ?? '');
 
-    // Placeholder for your authentication logic
-    if (!empty($email) && !empty($password)) {
-        header("Location: admin.php");
+    //authentication logic: do not let the user in if the fields are empty and the captcha is not verified
+    if (empty($email) || empty($password)) {
+        header("Location: login.php?error=Please fill in all fields");
+        exit();
+    } elseif ($_POST['captcha_verified'] !== '1') {
+        header("Location: login.php?error=Please complete the CAPTCHA verification");
         exit();
     } else {
-        $message = "Please fill in all fields.";
+        // let's pretend a database exists
+        header("Location: admin.php");
+        exit();
     }
 }
 ?>
@@ -21,159 +26,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
     <title>Welcome Back - Login</title>
-    <style>
-        /* Base Reset */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: Arial, sans-serif;
-        }
-
-        body {
-            height: 100vh;
-            display: flex;
-            background-color: #1a0f2e; /* Fallback dark background */
-            overflow: hidden;
-        }
-
-        /* Left Section: The Form */
-        .form-section {
-            width: 65%;
-            height: 100%;
-            background-color: #ffffff;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-            z-index: 2;
-        }
-
-        /* The Wavy Edge Effect */
-        .form-section::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            right: -80px; /* Pushes the wave over the image */
-            width: 80px;
-            background-color: transparent;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L50,0 C100,33 0,66 50,100 L0,100 Z' fill='%23ffffff'/%3E%3C/svg%3E");            background-size: 100% 100%;
-            background-repeat: no-repeat;
-            z-index: -1;
-        }
-
-        /* Form Container */
-        .form-wrapper {
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            padding-right: 40px; /* Offset to center visually with the curve */
-        }
-
-        h1 {
-            color: #2b1154;
-            font-size: 2.5rem;
-            font-family: "Times New Roman", serif;
-            font-weight: normal;
-            letter-spacing: 2px;
-            margin-bottom: 50px;
-        }
-
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            align-items: center;
-        }
-
-        /* Inputs */
-        input[type="email"],
-        input[type="password"] {
-            width: 100%;
-            padding: 18px 25px;
-            border-radius: 30px;
-            border: none;
-            background-color: #1a0f2e;
-            color: #ffffff;
-            font-size: 1rem;
-            outline: none;
-        }
-
-        input::placeholder {
-            color: #887a9e;
-        }
-
-        /* Login Button */
-        button {
-            margin-top: 20px;
-            padding: 15px 40px;
-            width: 150px;
-            border-radius: 30px;
-            border: none;
-            background-color: #1a0f2e;
-            color: #ffffff;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        button:hover {
-            background-color: #381b6b;
-        }
-
-        /* Footer Link */
-        .signup-link {
-            margin-top: 40px;
-            color: #2b1154;
-            font-size: 0.9rem;
-        }
-
-        .signup-link a {
-            color: #2b1154;
-            text-decoration: underline;
-            font-weight: bold;
-        }
-
-        /* PHP Message Alert */
-        .alert {
-            margin-bottom: 20px;
-            color: #d9534f;
-            font-weight: bold;
-        }
-
-        /* Right Section: The Background Image */
-        .image-section {
-            width: 35%;
-            height: 100%;
-            position: absolute;
-            right: 0;
-            top: 0;
-            z-index: 1;
-            /* Replace the URL below with your actual food image path */
-            background: url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=1000&auto=format&fit=crop') center/cover no-repeat;
-            box-shadow: inset 100vw 0 0 rgba(26, 15, 46, 0.4); /* Dark overlay */
-        }
-
-        /* Responsive Design for smaller screens */
-        @media (max-width: 768px) {
-            .form-section {
-                width: 100%;
-            }
-            .form-section::after {
-                display: none;
-            }
-            .form-wrapper {
-                padding-right: 0;
-            }
-            .image-section {
-                display: none; /* Hide image on mobile */
-            }
-        }
-    </style>
 </head>
+
+
+
 <body>
 
 <!-- LOGIN FORM -->
@@ -186,19 +44,133 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             <h1>WELCOME BACK</h1>
             
-            <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="POST">
+            <form id="loginForm" action="admin.php" method="post" class="form-box" style="box-shadow:none; border:none; padding:0;">
+                <?php if (isset($_GET['error'])) { echo "<p class='error'>".$_GET['error']."</p>"; } ?>
                 <input type="email" name="email" placeholder="Enter email" required>
                 <input type="password" name="password" placeholder="Enter Password" required>
-                <button type="button" onclick="window.location.href='admin.php'">LOGIN</button>
+                <button type="button" id="loginBtn" onclick="openCaptcha()">LOGIN</button>
+                <input type="hidden" name="captcha_verified" id="captcha_verified" value="0">
             </form>
             
             <p class="signup-link">
                 Create a new account? <a href="signup.php">Sign up</a>
             </p>
+                    <!-- CAPTCHA Modal -->
+            <div id="captchaModal" class="captcha-modal">
+                <div class="captcha-content">
+                    <div class="captcha-title">Security Verification</div>
+                    <div class="captcha-instruction">Please select all the squares with a man.</div>
+                    <div class="selected-count">Selected: <span id="selectedCount">0</span>/25</div>
+                    
+                    <div class="captcha-image-container">
+                        <img src="captcha.png" alt="CAPTCHA Image">
+                        <div class="captcha-grid" id="captchaGrid"></div>
+                    </div>
+
+                    <div class="captcha-error" id="captchaError">Please try again</div>
+                    
+                    <div class="captcha-button-group">
+                        <button type="button" class="captcha-button submit" onclick="verifyCaptcha()">Verify</button>
+                        <button type="button" class="captcha-button cancel" onclick="closeCaptcha()">Cancel</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <div class="image-section"></div>
 
+    <script>
+        const selectedSquares = new Set();
+
+        function openCaptcha() {
+            document.getElementById('captchaModal').style.display = 'block';
+            generateGrid();
+        }
+
+        function closeCaptcha() {
+            document.getElementById('captchaModal').style.display = 'none';
+            selectedSquares.clear();
+            updateSelectedCount();
+            document.getElementById('captchaError').classList.remove('show');
+        }
+
+        function generateGrid() {
+            const grid = document.getElementById('captchaGrid');
+            grid.innerHTML = '';
+            
+            for (let i = 0; i < 25; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'captcha-cell';
+                cell.dataset.index = i;
+                cell.onclick = () => toggleCell(i);
+                grid.appendChild(cell);
+            }
+        }
+
+        function toggleCell(index) {
+            const cell = document.querySelector(`[data-index="${index}"]`);
+            if (selectedSquares.has(index)) {
+                selectedSquares.delete(index);
+                cell.classList.remove('selected');
+            } else {
+                selectedSquares.add(index);
+                cell.classList.add('selected');
+            }
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            document.getElementById('selectedCount').textContent = selectedSquares.size;
+        }
+
+        function verifyCaptcha() {
+            if (selectedSquares.size === 0) {
+                document.getElementById('captchaError').textContent = 'Please select at least one square';
+                document.getElementById('captchaError').classList.add('show');
+                return;
+            }
+
+            const selectedArray = Array.from(selectedSquares).sort((a, b) => a - b);
+            
+            // Send to server for validation
+            fetch('captcha_validate.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    selected: selectedArray
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('captcha_verified').value = '1';
+                    closeCaptcha();
+                    document.getElementById('loginForm').submit();
+                } else {
+                    document.getElementById('captchaError').textContent = data.message || 'Incorrect selection. Please try again.';
+                    document.getElementById('captchaError').classList.add('show');
+                    selectedSquares.clear();
+                    generateGrid();
+                    updateSelectedCount();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('captchaError').textContent = 'An error occurred. Please try again.';
+                document.getElementById('captchaError').classList.add('show');
+            });
+        }
+
+        // Close modal if clicking outside the content
+        window.onclick = function(event) {
+            const modal = document.getElementById('captchaModal');
+            if (event.target === modal) {
+                closeCaptcha();
+            }
+        }
+    </script>
 </body>
 </html>
