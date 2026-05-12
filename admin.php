@@ -118,25 +118,24 @@ $adminName = "Admin";
         }
 
         .meetings-box {
-            background-color: #d9d9d9;
-            padding: 30px;
-            border-radius: 5px;
+            /* Box removed for cleaner card look */
         }
 
         .meetings-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 20px;
         }
 
         /* Individual Meeting Card */
         .meeting-card {
             background: white;
-            padding: 15px;
-            border-radius: 5px;
+            padding: 20px;
+            border-radius: 10px;
             display: flex;
-            justify-content: space-between;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            flex-direction: column;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+            border-top: 5px solid #11072b;
         }
 
         .meeting-info h4 {
@@ -166,9 +165,12 @@ $adminName = "Admin";
         /* Card Action Buttons (Check/Trash) */
         .card-actions {
             display: flex;
-            flex-direction: column;
-            justify-content: center;
+            flex-direction: row;
+            justify-content: flex-end;
             gap: 15px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
         }
 
         .icon-btn {
@@ -248,6 +250,7 @@ $adminName = "Admin";
             display: flex;
             justify-content: space-between;
             align-items: center;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
         }
 
         .user-info p { font-size: 0.7rem; color: #ccc; margin-bottom: 3px; }
