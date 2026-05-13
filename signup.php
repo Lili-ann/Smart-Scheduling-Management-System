@@ -1,12 +1,15 @@
 <?php
+require_once "db.php";
 
 $message = '';
+$messageType = 'error';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $fullname = htmlspecialchars($_POST['fullname'] ?? '');
-    $email = htmlspecialchars($_POST['email'] ?? '');
-    $password = htmlspecialchars($_POST['password'] ?? '');
-    $role = htmlspecialchars($_POST['role'] ?? '');
+    $fullname = trim($_POST['fullname'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $role = trim($_POST['role'] ?? '');
+    $allowedRoles = ['Admin', 'User'];
 
     // Password strength validation (sign up only)
     $passwordErrors = [];
@@ -27,12 +30,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $passwordErrors[] = "one special character";
     }
 
-    // Placeholder for the signup logic ahh
     if (!empty($fullname) && !empty($email) && !empty($password) && !empty($role)) {
-        if (!empty($passwordErrors)) {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $message = "Please enter a valid email address.";
+        } elseif (!in_array($role, $allowedRoles, true)) {
+            $message = "Please select a valid role.";
+        } elseif (!empty($passwordErrors)) {
             $message = "Password must include: " . implode(", ", $passwordErrors) . ".";
         } else {
-            $message = "Account created for: " . $email . " as " . $role;
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            try {
+                $stmt = $conn->prepare("INSERT INTO users (fullname, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())");
+                $stmt->bind_param("ssss", $fullname, $email, $passwordHash, $role);
+
+                $stmt->execute();
+                $message = "Account created successfully. You can now login.";
+                $messageType = 'success';
+
+                $stmt->close();
+            } catch (mysqli_sql_exception $e) {
+                if ($e->getCode() === 1062) {
+                    $message = "An account with this email already exists.";
+                } else {
+                    $message = "Signup setup is incomplete. Please make sure the users table exists.";
+                }
+            }
         }
     } else {
         $message = "Please fill in all fields.";
@@ -171,6 +193,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             font-weight: bold;
         }
 
+        .alert.success {
+            color: #198754;
+        }
+
         /* Right Section: The Background Image */
         .image-section {
             width: 35%;
@@ -207,7 +233,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="form-wrapper">
             
             <?php if(!empty($message)): ?>
-                <div class="alert"><?php echo $message; ?></div>
+                <div class="alert <?php echo $messageType; ?>"><?php echo htmlspecialchars($message); ?></div>
             <?php endif; ?>
 
             <h1>SIGN UP</h1>

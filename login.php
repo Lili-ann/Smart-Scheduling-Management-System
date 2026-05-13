@@ -1,22 +1,53 @@
 <?php
+session_start();
+require_once "db.php";
 
 $message = '';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $email = htmlspecialchars($_POST['email'] ?? '');
-    $password = htmlspecialchars($_POST['password'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
 
     //authentication logic: do not let the user in if the fields are empty and the captcha is not verified
     if (empty($email) || empty($password)) {
         header("Location: login.php?error=Please fill in all fields");
         exit();
-    } elseif ($_POST['captcha_verified'] !== '1') {
+    } elseif (($_POST['captcha_verified'] ?? '0') !== '1') {
         header("Location: login.php?error=Please complete the CAPTCHA verification");
         exit();
     } else {
-        // let's pretend a database exists
-        header("Location: admin.php");
-        exit();
+        $stmt = $conn->prepare("SELECT id, fullname, password_hash, role FROM users WHERE email = ?");
+        if ($stmt) {
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            if ($row = $result->fetch_assoc()) {
+                if (password_verify($password, $row['password_hash'])) {
+                    // Set session variables for dashboard
+                    $_SESSION['user_id'] = $row['id'];
+                    $_SESSION['user_name'] = $row['fullname'];
+                    $_SESSION['user_role'] = $row['role'];
+
+                    if ($row['role'] === 'Admin') {
+                        header("Location: admin.php");
+                    } else {
+                        header("Location: user.php");
+                    }
+                    exit();
+                } else {
+                    header("Location: login.php?error=Invalid email or password");
+                    exit();
+                }
+            } else {
+                header("Location: login.php?error=Invalid email or password");
+                exit();
+            }
+            $stmt->close();
+        } else {
+            header("Location: login.php?error=Database error");
+            exit();
+        }
     }
 }
 ?>
@@ -44,8 +75,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             <h1>WELCOME BACK</h1>
             
-            <form id="loginForm" action="admin.php" method="post" class="form-box" style="box-shadow:none; border:none; padding:0;">
-                <?php if (isset($_GET['error'])) { echo "<p class='error'>".$_GET['error']."</p>"; } ?>
+            <form id="loginForm" action="login.php" method="post" class="form-box" style="box-shadow:none; border:none; padding:0;">
+                <?php if (isset($_GET['error'])) { echo "<p class='error'>".htmlspecialchars($_GET['error'])."</p>"; } ?>
                 <input type="email" name="email" placeholder="Enter email" required>
                 <input type="password" name="password" placeholder="Enter Password" required>
                 <button type="button" id="loginBtn" onclick="openCaptcha()">LOGIN</button>
