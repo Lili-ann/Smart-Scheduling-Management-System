@@ -200,8 +200,10 @@
         }
 
         /* Inputs */
+        input[type="text"],
         input[type="email"],
-        input[type="password"] {
+        input[type="password"],
+        select {
             width: 100%;
             padding: 18px 25px;
             border-radius: 30px;
@@ -254,6 +256,10 @@
             font-weight: bold;
         }
 
+        .alert.success {
+            color: #198754;
+        }
+
         /* Right Section: The Background Image */
         .image-section {
             width: 35%;
@@ -262,8 +268,7 @@
             right: 0;
             top: 0;
             z-index: 1;
-            /* Replace the URL below with your actual food image path */
-            background: url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=1000&auto=format&fit=crop') center/cover no-repeat;
+            background: url('https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80') center/cover no-repeat;
             box-shadow: inset 100vw 0 0 rgba(26, 15, 46, 0.4); /* Dark overlay */
         }
 
