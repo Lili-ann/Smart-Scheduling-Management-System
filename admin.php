@@ -2,6 +2,11 @@
 session_start();
 require_once "db.php";
 
+if (($_SESSION['user_role'] ?? '') !== 'Admin') {
+    header("Location: login.php?error=Please log in as an admin to access that page");
+    exit();
+}
+
 $adminName = $_SESSION['user_name'] ?? "Admin";
 $message = '';
 $messageType = 'error';

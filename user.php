@@ -2,6 +2,11 @@
 session_start();
 require_once "db.php";
 
+if (($_SESSION['user_role'] ?? '') !== 'User') {
+    header("Location: login.php?error=Please log in as a user to access that page");
+    exit();
+}
+
 $userName = $_SESSION['user_name'] ?? "User";
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $message = '';
