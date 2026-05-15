@@ -2,11 +2,14 @@
 session_start();
 require_once "db.php";
 
+// Only normal users are allowed to open this page.
+// Admins or guests are sent back to login.
 if (($_SESSION['user_role'] ?? '') !== 'User') {
     header("Location: login.php?error=Please log in as a user to access that page");
     exit();
 }
 
+// Basic user information and arrays used to build the dashboard.
 $userName = $_SESSION['user_name'] ?? "User";
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $message = '';
@@ -17,6 +20,9 @@ $meetingHistory = [];
 $myMeetingRequests = [];
 $eventDays = [];
 $calendarMeetings = [];
+
+// Decide which month the calendar should display.
+// If no month is requested, show the current month.
 $requestedMonth = $_GET['month'] ?? '';
 $calendarDate = preg_match('/^\d{4}-\d{2}$/', $requestedMonth)
     ? DateTime::createFromFormat('!Y-m-d', $requestedMonth . '-01')
@@ -32,6 +38,8 @@ $leadingEmptyDays = ((int)$firstDayOfMonth->format('N')) - 1;
 $prevMonth = (clone $calendarDate)->modify('-1 month')->format('Y-m');
 $nextMonth = (clone $calendarDate)->modify('+1 month')->format('Y-m');
 
+// Save attendance from the meeting details popup.
+// This is called by JavaScript, so it returns JSON instead of a full page.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'mark_attendance') {
     header('Content-Type: application/json');
 
@@ -61,6 +69,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'mark_
     exit();
 }
 
+// Submit a room request for admin approval.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'request_room') {
     $title = trim($_POST['meeting_title'] ?? '');
     $pic = trim($_POST['meeting_pic'] ?? '');
@@ -91,11 +100,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'reque
     }
 }
 
+// Show a success message after actions like submitting a room request.
 if (isset($_GET['success'])) {
     $message = $_GET['success'];
     $messageType = 'success';
 }
 
+// Load meetings and split them into upcoming, ended, calendar events, and history.
 try {
     $stmt = $conn->prepare(
         "SELECT m.id, m.status, m.title, m.pic, m.attendees, m.room, m.date, m.start_time, m.end_time,
@@ -126,6 +137,7 @@ try {
                 'attendance_status' => $row['attendance_status'] ?? ''
             ];
 
+            // Add this meeting to the calendar if it belongs to the selected month.
             if ((int)$dateObj->format('Y') === $calendarYear && (int)$dateObj->format('m') === $calendarMonthNumber) {
                 $eventDay = (int)$dateObj->format('j');
                 $eventDays[] = $eventDay;
@@ -134,6 +146,7 @@ try {
 
             $isPastMeeting = $row['status'] === 'Ended' || $dateObj->format('Y-m-d') < $todayDate->format('Y-m-d');
 
+            // Meeting history only shows past meetings the user marked as attended.
             if ($isPastMeeting && ($row['attendance_status'] ?? '') === 'Attended') {
                 $meetingHistory[] = $meeting;
             }
@@ -153,6 +166,7 @@ try {
     $eventDays = [];
 }
 
+// Load the latest room requests made by this user.
 try {
     $stmt = $conn->prepare(
         "SELECT id, status, title, room, date, start_time, end_time
@@ -181,6 +195,7 @@ try {
     $myMeetingRequests = [];
 }
 
+// Prepare calendar data for JavaScript.
 $eventDays = array_unique($eventDays);
 $calendarMeetingsJson = json_encode($calendarMeetings, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
 $conn->close();
@@ -562,6 +577,7 @@ $conn->close();
 </head>
 <body>
 
+    <!-- Top banner with the user greeting and logout link. -->
     <header class="header-container">
         <h1>Hello, {<?php echo $userName; ?>}</h1>
         <a href="login.php" class="logout-btn">Logout</a>
@@ -570,6 +586,7 @@ $conn->close();
 
     <main class="main-content">
         
+        <!-- Left side: action buttons plus upcoming and ended meeting cards. -->
         <section class="left-panel">
             <div class="request-toolbar">
                 <button type="button" id="requestRoomBtn" class="btn-request-room">Request Room</button>
@@ -581,6 +598,7 @@ $conn->close();
                 <?php if (empty($upcomingMeetings)): ?>
                     <p class="empty-state">No upcoming meetings at this time.</p>
                 <?php else: ?>
+                    <!-- Upcoming meeting cards can be clicked to open meeting details. -->
                     <?php foreach ($upcomingMeetings as $meeting): ?>
                         <div class="meeting-card" onclick='openMeetingModal(<?php echo htmlspecialchars(json_encode($meeting), ENT_QUOTES); ?>)'>
                             <?php if ($meeting['attendance_status'] === 'Attended'): ?>
@@ -604,6 +622,7 @@ $conn->close();
                 <?php if (empty($endedMeetings)): ?>
                     <p class="empty-state">No ended meetings to display.</p>
                 <?php else: ?>
+                    <!-- Ended meeting cards can still be opened to update attendance. -->
                     <?php foreach ($endedMeetings as $meeting): ?>
                         <div class="meeting-card" onclick='openMeetingModal(<?php echo htmlspecialchars(json_encode($meeting), ENT_QUOTES); ?>)'>
                             <?php if ($meeting['attendance_status'] === 'Attended'): ?>
@@ -626,6 +645,7 @@ $conn->close();
 
         <div class="divider"></div>
 
+        <!-- Right side: calendar and this user's room request status. -->
         <section class="right-panel">
             <div class="calendar-container">
                 <div class="calendar-header">
@@ -669,6 +689,7 @@ $conn->close();
                 <?php if (empty($myMeetingRequests)): ?>
                     <p class="empty-state">No room requests yet.</p>
                 <?php else: ?>
+                    <!-- Shows the latest requests submitted by this user. -->
                     <?php foreach ($myMeetingRequests as $request): ?>
                         <div class="request-status-card">
                             <span class="request-status <?php echo htmlspecialchars($request['status']); ?>"><?php echo htmlspecialchars($request['status']); ?></span>
@@ -687,6 +708,7 @@ $conn->close();
     <footer class="footer">
     </footer>
 
+    <!-- Feedback popup shown after successful or failed actions. -->
     <?php if (!empty($message)): ?>
         <div id="messageModal" class="modal-overlay" style="display: flex;">
             <div class="modal-content">
@@ -773,6 +795,7 @@ $conn->close();
     </div>
 
     <script>
+        // Main popup and button references used by the dashboard.
         const meetingModal = document.getElementById('meetingDetailsModal');
         const closeModalBtn = document.getElementById('closeMeetingDetailsModal');
         const calendarMeetings = <?php echo $calendarMeetingsJson ?: '{}'; ?>;
@@ -791,6 +814,7 @@ $conn->close();
         const messageModalOkBtn = document.getElementById('messageModalOkBtn');
         let currentMeetingId = null;
 
+        // Open and close the room request popup.
         requestRoomBtn.addEventListener('click', () => {
             requestRoomModal.style.display = 'flex';
         });
@@ -799,6 +823,7 @@ $conn->close();
             requestRoomModal.style.display = 'none';
         });
 
+        // Open and close the meeting history popup.
         meetingHistoryBtn.addEventListener('click', () => {
             meetingHistoryModal.style.display = 'flex';
         });
@@ -807,6 +832,7 @@ $conn->close();
             meetingHistoryModal.style.display = 'none';
         });
 
+        // Remove the success value from the URL so refreshing does not show the popup again.
         if (messageModal && window.history.replaceState) {
             const currentUrl = new URL(window.location.href);
             if (currentUrl.searchParams.has('success')) {
@@ -828,6 +854,7 @@ $conn->close();
             messageModalOkBtn.addEventListener('click', closeMessageModal);
         }
 
+        // Calendar dots open the meetings scheduled for that day.
         document.querySelectorAll('[data-event-day]').forEach((dayButton) => {
             dayButton.addEventListener('click', () => {
                 const meetings = calendarMeetings[dayButton.dataset.eventDay] || [];
@@ -864,6 +891,7 @@ $conn->close();
             });
         });
 
+        // Fill and open the meeting details popup.
         function openMeetingModal(meeting) {
             currentMeetingId = meeting.id;
             document.getElementById('modalMeetingTitle').innerText = meeting.title;
@@ -886,6 +914,7 @@ $conn->close();
             meetingModal.style.display = 'flex';
         }
 
+        // Send attendance updates to PHP without leaving the page.
         function markAttendance(status) {
             if (!currentMeetingId) return;
 
@@ -901,7 +930,7 @@ $conn->close();
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    location.reload(); // Reload to reflect changes
+                    location.reload(); // Reload so the attendance badge updates.
                 } else {
                     alert('Error updating attendance.');
                 }
@@ -914,6 +943,8 @@ $conn->close();
 
         closeModalBtn.addEventListener('click', () => meetingModal.style.display = 'none');
         closeCalendarMeetingsModalBtn.addEventListener('click', () => calendarMeetingsModal.style.display = 'none');
+
+        // Clicking the dark background outside a popup closes that popup.
         window.addEventListener('click', (e) => {
             if (e.target === messageModal) closeMessageModal();
             if (e.target === requestRoomModal) requestRoomModal.style.display = 'none';
@@ -923,6 +954,7 @@ $conn->close();
         });
     </script>
     <script>
+        // Registers the service worker so the app can cache basic files for PWA support.
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js').catch((error) => {

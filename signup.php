@@ -1,12 +1,14 @@
 <?php
 require_once "db.php";
 
+// Default values used by the form and alert message.
 $message = '';
 $messageType = 'error';
 $fullname = '';
 $email = '';
 $role = '';
 
+// Run this block only after the user submits the signup form.
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $fullname = trim($_POST['fullname'] ?? '');
     $email = trim($_POST['email'] ?? '');
@@ -14,7 +16,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $role = trim($_POST['role'] ?? '');
     $allowedRoles = ['Admin', 'User'];
 
-    // Password strength validation (sign up only)
+    // Build a list of missing password requirements.
     $passwordErrors = [];
 
     if (strlen($password) < 8) {
@@ -33,6 +35,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $passwordErrors[] = "one special character";
     }
 
+    // Validate all form inputs before saving the new account.
     if (!empty($fullname) && !empty($email) && !empty($password) && !empty($role)) {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $message = "Please enter a valid email address.";
@@ -41,8 +44,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         } elseif (!empty($passwordErrors)) {
             $message = "Password must include: " . implode(", ", $passwordErrors) . ".";
         } else {
+            // Store the password safely as a hash, not as plain text.
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
             try {
+                // Save the new user account to the users table.
                 $stmt = $conn->prepare("INSERT INTO users (fullname, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())");
                 $stmt->bind_param("ssss", $fullname, $email, $passwordHash, $role);
 
@@ -55,6 +60,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 $stmt->close();
             } catch (mysqli_sql_exception $e) {
+                // Error code 1062 means the email already exists because it is unique.
                 if ($e->getCode() === 1062) {
                     $message = "An account with this email already exists.";
                 } else {
@@ -81,16 +87,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 <body>
 
-<!-- SIGNUP FORM -->
+    <!-- Signup form shown to new users. -->
     <div class="form-section">
         <div class="form-wrapper">
             
+            <!-- Show validation or success messages above the form. -->
             <?php if(!empty($message)): ?>
                 <div class="alert <?php echo $messageType; ?>"><?php echo htmlspecialchars($message); ?></div>
             <?php endif; ?>
 
             <h1>SIGN UP</h1>
             
+            <!-- Sends the signup information back to this same page for processing. -->
             <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="POST">
                 <input type="text" name="fullname" placeholder="Full Name" value="<?php echo htmlspecialchars($fullname); ?>" required>
                 <input type="email" name="email" placeholder="Enter email" value="<?php echo htmlspecialchars($email); ?>" required>
@@ -112,6 +120,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <div class="image-section"></div>
 
     <script>
+        // Registers the service worker so the app can cache basic files for PWA support.
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js').catch((error) => {

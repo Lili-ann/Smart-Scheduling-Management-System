@@ -2,15 +2,19 @@
 session_start();
 require_once "db.php";
 
+// Only admins are allowed to open this page.
+// If a normal user tries to access it, send them back to login.
 if (($_SESSION['user_role'] ?? '') !== 'Admin') {
     header("Location: login.php?error=Please log in as an admin to access that page");
     exit();
 }
 
+// Basic values used by the page and feedback popups.
 $adminName = $_SESSION['user_name'] ?? "Admin";
 $message = '';
 $messageType = 'error';
 
+// Download all meetings as a CSV file when the admin clicks "Export as .csv".
 if (($_GET['action'] ?? '') === 'export_meetings') {
     $filename = 'meetings-' . date('Y-m-d') . '.csv';
 
@@ -53,6 +57,7 @@ if (($_GET['action'] ?? '') === 'export_meetings') {
     exit();
 }
 
+// Create a new meeting after the admin fills in meeting details and chooses a room.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'add_meeting') {
     $title = trim($_POST['meeting_title'] ?? '');
     $pic = trim($_POST['meeting_pic'] ?? '');
@@ -82,6 +87,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'add_m
     }
 }
 
+// Mark an existing meeting as ended.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'end_meeting') {
     $meetingId = (int)($_POST['meeting_id'] ?? 0);
 
@@ -102,6 +108,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'end_m
     }
 }
 
+// Delete a meeting after the admin confirms the delete popup.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'delete_meeting') {
     $meetingId = (int)($_POST['meeting_id'] ?? 0);
 
@@ -122,6 +129,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'delet
     }
 }
 
+// Save changes made from the edit meeting popup.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'update_meeting') {
     $meetingId = (int)($_POST['meeting_id'] ?? 0);
     $status = trim($_POST['meeting_status'] ?? '');
@@ -155,6 +163,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'updat
     }
 }
 
+// Approve a user's room request.
+// This creates a real meeting and then marks the request as approved.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'approve_request') {
     $requestId = (int)($_POST['request_id'] ?? 0);
     $reviewedBy = $_SESSION['user_id'] ?? null;
@@ -205,6 +215,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'appro
     }
 }
 
+// Reject a user's room request without creating a meeting.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'reject_request') {
     $requestId = (int)($_POST['request_id'] ?? 0);
     $reviewedBy = $_SESSION['user_id'] ?? null;
@@ -231,6 +242,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'rejec
     }
 }
 
+// Add a new user account from the admin dashboard.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'add_user') {
     $fullname = trim($_POST['fullname'] ?? '');
     $email = trim($_POST['email'] ?? '');
@@ -269,6 +281,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'add_u
     }
 }
 
+// Update an existing user's name, email, or role.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'update_user') {
     $userId = (int)($_POST['user_id'] ?? 0);
     $fullname = trim($_POST['fullname'] ?? '');
@@ -299,6 +312,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'updat
     }
 }
 
+// Delete a user account.
+// The current admin cannot delete their own account while logged in.
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'delete_user') {
     $userId = (int)($_POST['user_id'] ?? 0);
     $currentUserId = (int)($_SESSION['user_id'] ?? 0);
@@ -322,12 +337,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'delet
     }
 }
 
+// Show a success message after redirects like add, edit, approve, or delete.
 if (isset($_GET['success'])) {
     $message = $_GET['success'];
     $messageType = 'success';
 }
 
-// Fetch Pending Meeting Requests
+// Load pending room requests so the admin can approve or reject them.
 $meetingRequests = [];
 try {
     $sqlRequests = "SELECT mr.*, u.fullname AS requester_name
@@ -351,7 +367,7 @@ try {
     $meetingRequests = [];
 }
 
-// Fetch Reserved Rooms from database
+// Load upcoming room reservations for the "Reserved Room" list.
 $reservedRooms = [];
 try {
     $sqlRooms = "SELECT room, date, start_time, end_time FROM meetings WHERE status = 'Upcoming' ORDER BY date ASC, start_time ASC";
@@ -370,7 +386,7 @@ try {
     $reservedRooms = [];
 }
 
-// Fetch Meetings from database
+// Load all meetings shown as cards on the left side.
 $meetings = [];
 try {
     $sqlMeetings = "SELECT * FROM meetings ORDER BY date ASC, start_time ASC";
@@ -395,7 +411,7 @@ try {
     $meetings = [];
 }
 
-// Fetch Users from database
+// Load all users shown in the user list on the right side.
 $users = [];
 try {
     $sqlUsers = "SELECT id, fullname, email, role FROM users ORDER BY fullname ASC";
@@ -829,6 +845,7 @@ $conn->close();
 </head>
 <body>
 
+    <!-- Top banner with the admin greeting and logout link. -->
     <header class="header-container">
         <h1>Hello, {<?php echo $adminName; ?>}</h1>
         <a href="login.php" class="logout-btn">Logout</a>
@@ -837,6 +854,7 @@ $conn->close();
 
     <main class="main-content">
         
+        <!-- Left side: meeting controls and meeting cards. -->
         <section class="meetings-section">
             <div class="action-buttons">
                 <a href="admin.php?action=export_meetings">Export as .csv</a>
@@ -846,6 +864,7 @@ $conn->close();
             <div class="meetings-box">
                 <div class="meetings-grid">
                     
+                    <!-- Each meeting becomes one card with actions for end, edit, and delete. -->
                     <?php foreach ($meetings as $meeting): ?>
                         <div class="meeting-card">
                             <div class="meeting-info">
@@ -906,12 +925,14 @@ $conn->close();
 
         <div class="divider"></div>
 
+        <!-- Right side: requests, reserved rooms, and user management. -->
         <section class="users-section">
             <h2>Meeting Requests</h2>
             <div class="users-list">
                 <?php if (empty($meetingRequests)): ?>
                     <p style="color: #666; font-style: italic; text-align: center;">No pending requests.</p>
                 <?php else: ?>
+                    <!-- Requests submitted by users need an approve or reject decision. -->
                     <?php foreach ($meetingRequests as $request): ?>
                         <div class="request-card">
                             <h3><?php echo htmlspecialchars($request['title']); ?></h3>
@@ -943,6 +964,7 @@ $conn->close();
                 <?php if (empty($reservedRooms)): ?>
                     <p style="color: #666; font-style: italic; text-align: center;">No rooms reserved.</p>
                 <?php else: ?>
+                    <!-- Reserved rooms are taken from upcoming meetings. -->
                     <?php foreach ($reservedRooms as $room): ?>
                         <div class="user-card">
                             <div class="user-info">
@@ -959,6 +981,7 @@ $conn->close();
                 <?php if (empty($users)): ?>
                     <p style="color: #666; font-style: italic; text-align: center;">No users found.</p>
                 <?php else: ?>
+                    <!-- User cards let the admin edit or delete each account. -->
                     <?php foreach ($users as $user): ?>
                         <div class="user-card">
                             <div class="user-info">
@@ -997,6 +1020,7 @@ $conn->close();
     <footer class="footer">
     </footer>
 
+    <!-- Feedback popup shown after successful or failed actions. -->
     <?php if (!empty($message)): ?>
         <div id="messageModal" class="modal-overlay" style="display: flex;">
             <div class="modal-content message-modal-content">
@@ -1146,6 +1170,7 @@ $conn->close();
     </div>
 
     <script>
+        // Opens the edit user popup and fills it with the selected user's data.
         const editModal = document.getElementById('editUserModal');
         const closeModalBtn = document.getElementById('closeModal');
 
@@ -1159,6 +1184,7 @@ $conn->close();
 
         closeModalBtn.addEventListener('click', () => editModal.style.display = 'none');
 
+        // Opens and closes the add user popup.
         const addUserModal = document.getElementById('addUserModal');
         const closeAddUserModalBtn = document.getElementById('closeAddUserModal');
         const addUserBtn = document.getElementById('addUserBtn');
@@ -1169,6 +1195,7 @@ $conn->close();
 
         closeAddUserModalBtn.addEventListener('click', () => addUserModal.style.display = 'none');
 
+        // Opens and closes the first step of adding a meeting.
         const addMeetingModal = document.getElementById('addMeetingModal');
         const closeAddMeetingModalBtn = document.getElementById('closeAddMeetingModal');
         const addMeetingBtn = document.getElementById('addMeetingBtn');
@@ -1179,6 +1206,7 @@ $conn->close();
 
         closeAddMeetingModalBtn.addEventListener('click', () => addMeetingModal.style.display = 'none');
 
+        // Moves meeting details from step 1 into hidden fields for the room step.
         const proceedToRoomBtn = document.getElementById('proceedToRoomBtn');
         const reserveRoomModal = document.getElementById('reserveRoomModal');
         const closeReserveRoomModalBtn = document.getElementById('closeReserveRoomModal');
@@ -1206,6 +1234,7 @@ $conn->close();
         const closeMessageModalBtn = document.getElementById('closeMessageModal');
         const messageModalOkBtn = document.getElementById('messageModalOkBtn');
 
+        // Remove the success value from the URL so refreshing does not show the popup again.
         if (messageModal && window.history.replaceState) {
             const currentUrl = new URL(window.location.href);
             if (currentUrl.searchParams.has('success')) {
@@ -1227,6 +1256,7 @@ $conn->close();
             messageModalOkBtn.addEventListener('click', closeMessageModal);
         }
 
+        // Opens the delete meeting confirmation popup with the selected meeting name.
         const deleteMeetingModal = document.getElementById('deleteMeetingModal');
         const closeDeleteMeetingModalBtn = document.getElementById('closeDeleteMeetingModal');
         const cancelDeleteMeetingBtn = document.getElementById('cancelDeleteMeetingBtn');
@@ -1253,6 +1283,7 @@ $conn->close();
         const editMeetingModal = document.getElementById('editMeetingModal');
         const closeEditMeetingModalBtn = document.getElementById('closeEditMeetingModal');
 
+        // Opens the edit meeting popup and copies the card data into the form fields.
         document.querySelectorAll('.edit-meeting-btn').forEach((button) => {
             button.addEventListener('click', () => {
                 document.getElementById('edit_meeting_id').value = button.dataset.meetingId;
@@ -1270,6 +1301,7 @@ $conn->close();
 
         closeEditMeetingModalBtn.addEventListener('click', () => editMeetingModal.style.display = 'none');
 
+        // Clicking the dark background outside a popup closes that popup.
         window.addEventListener('click', (e) => {
             if (e.target === messageModal) {
                 closeMessageModal();
@@ -1295,6 +1327,7 @@ $conn->close();
         });
     </script>
     <script>
+        // Registers the service worker so the app can cache basic files for PWA support.
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js').catch((error) => {
