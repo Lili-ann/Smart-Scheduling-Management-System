@@ -9,13 +9,13 @@ session_start();
 // 15 16 17 18 19
 // 20 21 22 23 24
 // 
-// Modify the array below to match which squares contain a man in captcha.png
+// If you want you can change the correct squares to be whatever you want depending on which squares contain a man (Kaveh from genshin impact)
 
-$correctSquares = array(7, 12, 17, 22); // EXAMPLE - UPDATE THIS WITH ACTUAL CORRECT SQUARES
+$correctSquares = array(7, 12, 17, 22); // This here shows where Kaveh is standing
 
 header('Content-Type: application/json');
 
-// Get the selected squares from the request
+// Get the squares selected by the user from the POST request in the login page
 $input = json_decode(file_get_contents('php://input'), true);
 
 if (!isset($input['selected']) || !is_array($input['selected'])) {
@@ -28,11 +28,11 @@ if (!isset($input['selected']) || !is_array($input['selected'])) {
 
 $selected = $input['selected'];
 
-// Sort both arrays for comparison
+// Sort both arrays so we can compare them
 sort($correctSquares);
 sort($selected);
 
-// Check if the selected squares match the correct squares exactly
+// Check if the selected squares match the correct squares exactly, and if it works, then we throw a success.
 if ($selected === $correctSquares) {
     $_SESSION['captcha_verified'] = true;
     echo json_encode([
@@ -40,7 +40,7 @@ if ($selected === $correctSquares) {
         'message' => 'Verification successful'
     ]);
 } else {
-    // For security, don't reveal which squares are correct
+    // For security, don't reveal which squares are correct when the person gets it wrong.
     echo json_encode([
         'success' => false,
         'message' => 'Incorrect selection. Please try again.'

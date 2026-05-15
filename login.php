@@ -4,14 +4,16 @@ require_once "db.php";
 
 $message = '';
 
+// Checks if the user is already logged in or not. If they are, then we redirect them to the appropriate dashboard based on their role.
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    //authentication logic: do not let the user in if the fields are empty and the captcha is not verified
+    // Authentication logic: do not let the user in if the fields are empty and the captcha is not verified
     if (empty($email) || empty($password)) {
         header("Location: login.php?error=Please fill in all fields");
         exit();
+        // This is the specific part that checks for if the captcha is verified. er. Recaptcha? Probably.
     } elseif (($_POST['captcha_verified'] ?? '0') !== '1') {
         header("Location: login.php?error=Please complete the CAPTCHA verification");
         exit();
@@ -24,11 +26,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             if ($row = $result->fetch_assoc()) {
                 if (password_verify($password, $row['password_hash'])) {
-                    // Set session variables for dashboard
+                    // Set session variables for the dashboard
                     $_SESSION['user_id'] = $row['id'];
                     $_SESSION['user_name'] = $row['fullname'];
                     $_SESSION['user_role'] = $row['role'];
 
+                    // Takes them to the fitting dashboard depending on their role.
                     if ($row['role'] === 'Admin') {
                         header("Location: admin.php");
                     } else {
@@ -50,6 +53,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 }
+// the HTML is next. this one steals from styles.css, and I believe most of the captcha stuff is here too.
 ?>
 
 <!DOCTYPE html>
@@ -115,6 +119,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <div class="image-section"></div>
 
     <script>
+        // The script for the captcha.
         const selectedSquares = new Set();
 
         function openCaptcha() {
@@ -129,6 +134,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             document.getElementById('captchaError').classList.remove('show');
         }
 
+        // Handles the grid function of the captcha.
         function generateGrid() {
             const grid = document.getElementById('captchaGrid');
             grid.innerHTML = '';
@@ -207,6 +213,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     </script>
     <script>
+        // The service worker to turn it into a PWA.
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js').catch((error) => {
