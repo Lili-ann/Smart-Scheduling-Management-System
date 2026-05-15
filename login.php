@@ -57,6 +57,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#11072b">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="captcha.png">
     <link rel="stylesheet" href="styles.css">
     <title>Welcome Back - Login</title>
 </head>
@@ -201,6 +204,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if (event.target === modal) {
                 closeCaptcha();
             }
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch((error) => {
+                    console.error('Service worker registration failed:', error);
+                });
+            });
         }
     </script>
 </body>

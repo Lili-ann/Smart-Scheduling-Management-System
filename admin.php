@@ -417,6 +417,9 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#11072b">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="captcha.png">
     <title>Admin Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -1290,6 +1293,15 @@ $conn->close();
                 reserveRoomModal.style.display = 'none';
             }
         });
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch((error) => {
+                    console.error('Service worker registration failed:', error);
+                });
+            });
+        }
     </script>
 
 </body>

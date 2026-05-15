@@ -191,6 +191,9 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#11072b">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="captcha.png">
     <title>User Dashboard</title>
     <style>
         /* Base Reset */
@@ -918,6 +921,15 @@ $conn->close();
             if (e.target === calendarMeetingsModal) calendarMeetingsModal.style.display = 'none';
             if (e.target === meetingModal) meetingModal.style.display = 'none';
         });
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch((error) => {
+                    console.error('Service worker registration failed:', error);
+                });
+            });
+        }
     </script>
 </body>
 </html>
