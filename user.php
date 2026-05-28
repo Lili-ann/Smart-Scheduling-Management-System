@@ -573,6 +573,22 @@ $conn->close();
         .badge-not-attended { background-color: #f8d7da; color: #842029; }
         .empty-state { color: #666; font-style: italic; grid-column: 1 / -1; }
 
+
+        /* --- FAQ Button --- */
+        .faq {
+            background-color: #11062b;
+            color: white;
+            padding: 15px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1rem;
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 1000;
+        }
+
     </style>
 </head>
 <body>
@@ -703,6 +719,7 @@ $conn->close();
             </div>
         </section>
 
+        <input class="faq" type="image" src="FAQ.png" width="80" height="80">
     </main>
 
     <footer class="footer">
@@ -791,6 +808,12 @@ $conn->close();
                 <button class="btn-attended">Attended</button>
                 <button class="btn-not-attended">Not Attended</button>
             </div>
+        </div>
+    </div>
+
+    <div id="faqModal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-modal" id="closefaqModal">&times;</span>
         </div>
     </div>
 
