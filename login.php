@@ -29,6 +29,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     // Set session variables for the dashboard
                     $_SESSION['user_id'] = $row['id'];
                     $_SESSION['user_name'] = $row['fullname'];
+                    $_SESSION['user_email'] = $row['email'];
                     $_SESSION['user_role'] = $row['role'];
 
                     // Takes them to the fitting dashboard depending on their role.

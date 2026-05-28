@@ -112,6 +112,24 @@ INSERT INTO `meeting_requests` (`id`, `requester_id`, `status`, `title`, `pic`, 
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `admin_messages`
+--
+
+CREATE TABLE `admin_messages` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `sender_id` int(10) UNSIGNED DEFAULT NULL,
+  `sender_name` varchar(100) NOT NULL,
+  `sender_email` varchar(150) NOT NULL,
+  `subject` varchar(150) NOT NULL,
+  `content` text NOT NULL,
+  `status` enum('Unread','Read') NOT NULL DEFAULT 'Unread',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `users`
 --
 
@@ -164,6 +182,14 @@ ALTER TABLE `meeting_requests`
   ADD KEY `fk_requests_reviewer` (`reviewed_by`);
 
 --
+-- Indexes for table `admin_messages`
+--
+ALTER TABLE `admin_messages`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_admin_messages_status_created` (`status`,`created_at`),
+  ADD KEY `fk_admin_messages_sender` (`sender_id`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -191,6 +217,12 @@ ALTER TABLE `meeting_attendance`
 --
 ALTER TABLE `meeting_requests`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
+-- AUTO_INCREMENT for table `admin_messages`
+--
+ALTER TABLE `admin_messages`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `users`
@@ -221,6 +253,12 @@ ALTER TABLE `meeting_attendance`
 ALTER TABLE `meeting_requests`
   ADD CONSTRAINT `fk_requests_requester` FOREIGN KEY (`requester_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `fk_requests_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `admin_messages`
+--
+ALTER TABLE `admin_messages`
+  ADD CONSTRAINT `fk_admin_messages_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

@@ -34,4 +34,21 @@ $conn->query("
         CONSTRAINT fk_requests_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
     )
 ");
+
+// Stores messages sent from users to admins through the user dashboard.
+$conn->query("
+    CREATE TABLE IF NOT EXISTS admin_messages (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        sender_id INT UNSIGNED NULL,
+        sender_name VARCHAR(100) NOT NULL,
+        sender_email VARCHAR(150) NOT NULL,
+        subject VARCHAR(150) NOT NULL,
+        content TEXT NOT NULL,
+        status ENUM('Unread', 'Read') NOT NULL DEFAULT 'Unread',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_admin_messages_status_created (status, created_at),
+        CONSTRAINT fk_admin_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+");
 ?>

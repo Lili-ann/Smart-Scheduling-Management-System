@@ -100,6 +100,36 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'reque
     }
 }
 
+// Send a message to the Admin
+if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'send_admin_message') {
+    $msgName = trim($_POST['msg_name'] ?? '');
+    $msgEmail = trim($_POST['msg_email'] ?? '');
+    $msgContent = trim($_POST['msg_content'] ?? '');
+
+    if (empty($msgName) || empty($msgEmail) || empty($msgContent)) {
+        $message = "Please fill in all message fields.";
+    } elseif (!filter_var($msgEmail, FILTER_VALIDATE_EMAIL)) {
+        $message = "Please enter a valid email address.";
+    } else {
+        try {
+            $subject = substr($msgContent, 0, 80);
+            if (strlen($msgContent) > 80) {
+                $subject .= "...";
+            }
+
+            $stmt = $conn->prepare("INSERT INTO admin_messages (sender_id, sender_name, sender_email, subject, content) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("issss", $userId, $msgName, $msgEmail, $subject, $msgContent);
+            $stmt->execute();
+            $stmt->close();
+
+            header("Location: user.php?success=Message sent to admin successfully");
+            exit();
+        } catch (mysqli_sql_exception $e) {
+            $message = "Could not send the message to admin.";
+        }
+    }
+}
+
 // Show a success message after actions like submitting a room request.
 if (isset($_GET['success'])) {
     $message = $_GET['success'];
@@ -237,6 +267,7 @@ $conn->close();
             height: 100px;
             z-index: 1;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 100' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L1000,0 L1000,30 C750,10 250,120 0,80 Z' fill='%2311072b'/%3E%3C/svg%3E");
+            
             background-size: 100% 100%;
         }
 
@@ -508,6 +539,7 @@ $conn->close();
         .btn-attended:hover { background-color: #4ade4a; }
         .btn-not-attended { background-color: #d9534f; }
         .btn-not-attended:hover { background-color: #c9302c; }
+        
         .calendar-meeting-list {
             display: flex;
             flex-direction: column;
@@ -589,11 +621,136 @@ $conn->close();
             z-index: 1000;
         }
 
+        .faq-modal-content {
+            width: min(430px, calc(100vw - 32px));
+            max-width: 430px;
+            height: min(700px, calc(100vh - 32px));
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .faq-modal-content .close-modal {
+            top: 10px;
+            right: 14px;
+            color: white;
+            z-index: 2;
+        }
+
+        .faq-chat-frame {
+            width: 100%;
+            height: 100%;
+            border: 0;
+            display: block;
+        }
+
+        /* --- Send Message Admin Button & Modal --- */
+        .message-admin {
+            position: fixed;
+            bottom: 1rem;
+            left: 1rem;
+            z-index: 1000;
+            cursor: pointer;
+            transition: transform 0.2s;
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .message-admin:hover {
+            transform: scale(1.05);
+        }
+
+        .send-message-content {
+            background: #11062b; /* Matches your design screenshot */
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 450px;
+            position: relative;
+        }
+        .send-message-content h2 {
+            margin-bottom: 5px;
+            color: white;
+            text-transform: uppercase;
+            font-size: 1.5rem;
+            letter-spacing: 0.5px;
+        }
+        .send-message-divider {
+            height: 4px;
+            background: white;
+            width: 100%;
+            margin-bottom: 25px;
+            border-radius: 2px;
+        }
+        .send-message-content .close-modal {
+            color: white;
+        }
+        .send-message-content .close-modal:hover {
+            color: #ccc;
+        }
+        .send-message-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .send-message-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .send-message-group label {
+            width: 60px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: white;
+        }
+        .send-message-group input {
+            flex: 1;
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: none;
+            outline: none;
+            color: #333;
+        }
+        .send-message-form textarea {
+            width: 100%;
+            height: 120px;
+            padding: 15px;
+            border-radius: 12px;
+            border: none;
+            outline: none;
+            resize: none;
+            color: #333;
+            font-family: inherit;
+            margin-top: 5px;
+        }
+        .send-message-form textarea::placeholder {
+            color: #999;
+        }
+        .send-message-submit-wrapper {
+            display: flex;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        .send-message-submit-wrapper button {
+            background: white !important;
+            color: #11062b !important;
+            border: none;
+            padding: 10px 24px !important;
+            border-radius: 20px !important;
+            font-size: 0.85rem !important;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            width: auto !important;
+        }
+        .send-message-submit-wrapper button:hover {
+            background: #eee !important;
+        }
+
     </style>
 </head>
 <body>
 
-    <!-- Top banner with the user greeting and logout link. -->
     <header class="header-container">
         <h1>Hello, {<?php echo $userName; ?>}</h1>
         <a href="login.php" class="logout-btn">Logout</a>
@@ -602,7 +759,6 @@ $conn->close();
 
     <main class="main-content">
         
-        <!-- Left side: action buttons plus upcoming and ended meeting cards. -->
         <section class="left-panel">
             <div class="request-toolbar">
                 <button type="button" id="requestRoomBtn" class="btn-request-room">Request Room</button>
@@ -614,7 +770,6 @@ $conn->close();
                 <?php if (empty($upcomingMeetings)): ?>
                     <p class="empty-state">No upcoming meetings at this time.</p>
                 <?php else: ?>
-                    <!-- Upcoming meeting cards can be clicked to open meeting details. -->
                     <?php foreach ($upcomingMeetings as $meeting): ?>
                         <div class="meeting-card" onclick='openMeetingModal(<?php echo htmlspecialchars(json_encode($meeting), ENT_QUOTES); ?>)'>
                             <?php if ($meeting['attendance_status'] === 'Attended'): ?>
@@ -638,7 +793,6 @@ $conn->close();
                 <?php if (empty($endedMeetings)): ?>
                     <p class="empty-state">No ended meetings to display.</p>
                 <?php else: ?>
-                    <!-- Ended meeting cards can still be opened to update attendance. -->
                     <?php foreach ($endedMeetings as $meeting): ?>
                         <div class="meeting-card" onclick='openMeetingModal(<?php echo htmlspecialchars(json_encode($meeting), ENT_QUOTES); ?>)'>
                             <?php if ($meeting['attendance_status'] === 'Attended'): ?>
@@ -661,7 +815,6 @@ $conn->close();
 
         <div class="divider"></div>
 
-        <!-- Right side: calendar and this user's room request status. -->
         <section class="right-panel">
             <div class="calendar-container">
                 <div class="calendar-header">
@@ -705,7 +858,6 @@ $conn->close();
                 <?php if (empty($myMeetingRequests)): ?>
                     <p class="empty-state">No room requests yet.</p>
                 <?php else: ?>
-                    <!-- Shows the latest requests submitted by this user. -->
                     <?php foreach ($myMeetingRequests as $request): ?>
                         <div class="request-status-card">
                             <span class="request-status <?php echo htmlspecialchars($request['status']); ?>"><?php echo htmlspecialchars($request['status']); ?></span>
@@ -719,13 +871,14 @@ $conn->close();
             </div>
         </section>
 
-        <input class="faq" type="image" src="FAQ.png" width="80" height="80">
+        <input class="faq" id="faqBtn" type="image" src="FAQ.png" width="80" height="80" alt="Open FAQ chat">
+        
+        <input class="message-admin" id="messageAdminBtn" type="image" src="smsicon.svg" width="80" height="80" alt="Send Message">
     </main>
 
     <footer class="footer">
     </footer>
 
-    <!-- Feedback popup shown after successful or failed actions. -->
     <?php if (!empty($message)): ?>
         <div id="messageModal" class="modal-overlay" style="display: flex;">
             <div class="modal-content">
@@ -737,7 +890,6 @@ $conn->close();
         </div>
     <?php endif; ?>
 
-    <!-- Request Room Modal -->
     <div id="requestRoomModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeRequestRoomModal">&times;</span>
@@ -762,7 +914,6 @@ $conn->close();
         </div>
     </div>
 
-    <!-- Calendar Day Meetings Modal -->
     <div id="calendarMeetingsModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeCalendarMeetingsModal">&times;</span>
@@ -771,7 +922,6 @@ $conn->close();
         </div>
     </div>
 
-    <!-- Meeting History Modal -->
     <div id="meetingHistoryModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeMeetingHistoryModal">&times;</span>
@@ -792,7 +942,6 @@ $conn->close();
         </div>
     </div>
 
-    <!-- Meeting Details Modal -->
     <div id="meetingDetailsModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeMeetingDetailsModal">&times;</span>
@@ -812,8 +961,37 @@ $conn->close();
     </div>
 
     <div id="faqModal" class="modal-overlay">
-        <div class="modal-content">
-            <span class="close-modal" id="closefaqModal">&times;</span>
+        <div class="modal-content faq-modal-content">
+            <span class="close-modal" id="closeFaqModal">&times;</span>
+            <iframe class="faq-chat-frame" src="faq-chat.php" title="FAQ Assistant"></iframe>
+        </div>
+    </div>
+
+    <div id="sendMessageModal" class="modal-overlay">
+        <div class="send-message-content">
+            <span class="close-modal" id="closeSendMessageModal">&times;</span>
+            <h2>SEND MESSAGE</h2>
+            <div class="send-message-divider"></div>
+            
+            <form class="send-message-form" action="user.php" method="POST">
+                <input type="hidden" name="action" value="send_admin_message">
+                
+                <div class="send-message-group">
+                    <label for="msg_name">Name:</label>
+                    <input type="text" id="msg_name" name="msg_name" value="<?php echo htmlspecialchars($userName); ?>" required>
+                </div>
+                
+                <div class="send-message-group">
+                    <label for="msg_email">Email:</label>
+                    <input type="email" id="msg_email" name="msg_email" value="<?php echo htmlspecialchars($_SESSION['user_email'] ?? ''); ?>" required>
+                </div>
+                
+                <textarea name="msg_content" placeholder="Enter Message..." required></textarea>
+                
+                <div class="send-message-submit-wrapper">
+                    <button type="submit">Send Message</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -835,6 +1013,15 @@ $conn->close();
         const messageModal = document.getElementById('messageModal');
         const closeMessageModalBtn = document.getElementById('closeMessageModal');
         const messageModalOkBtn = document.getElementById('messageModalOkBtn');
+        const faqModal = document.getElementById('faqModal');
+        const faqBtn = document.getElementById('faqBtn');
+        const closeFaqModalBtn = document.getElementById('closeFaqModal');
+        
+        // New Message Admin Modal References
+        const sendMessageModal = document.getElementById('sendMessageModal');
+        const messageAdminBtn = document.getElementById('messageAdminBtn');
+        const closeSendMessageModalBtn = document.getElementById('closeSendMessageModal');
+        
         let currentMeetingId = null;
 
         // Open and close the room request popup.
@@ -854,6 +1041,25 @@ $conn->close();
         closeMeetingHistoryModalBtn.addEventListener('click', () => {
             meetingHistoryModal.style.display = 'none';
         });
+
+        // Open and close the FAQ assistant popup.
+        faqBtn.addEventListener('click', () => {
+            faqModal.style.display = 'flex';
+        });
+
+        closeFaqModalBtn.addEventListener('click', () => {
+            faqModal.style.display = 'none';
+        });
+
+        // Open and close the Send Message popup.
+        messageAdminBtn.addEventListener('click', () => {
+            sendMessageModal.style.display = 'flex';
+        });
+
+        closeSendMessageModalBtn.addEventListener('click', () => {
+            sendMessageModal.style.display = 'none';
+        });
+
 
         // Remove the success value from the URL so refreshing does not show the popup again.
         if (messageModal && window.history.replaceState) {
@@ -974,6 +1180,8 @@ $conn->close();
             if (e.target === meetingHistoryModal) meetingHistoryModal.style.display = 'none';
             if (e.target === calendarMeetingsModal) calendarMeetingsModal.style.display = 'none';
             if (e.target === meetingModal) meetingModal.style.display = 'none';
+            if (e.target === faqModal) faqModal.style.display = 'none';
+            if (e.target === sendMessageModal) sendMessageModal.style.display = 'none';
         });
     </script>
     <script>
@@ -988,3 +1196,4 @@ $conn->close();
     </script>
 </body>
 </html>
+

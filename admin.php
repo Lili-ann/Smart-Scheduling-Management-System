@@ -343,6 +343,25 @@ if (isset($_GET['success'])) {
     $messageType = 'success';
 }
 
+// Load messages sent by users from the user dashboard.
+$adminMessages = [];
+try {
+    $sqlMessages = "SELECT id, sender_name, sender_email, subject, content, status, created_at
+                    FROM admin_messages
+                    ORDER BY created_at DESC
+                    LIMIT 25";
+    $resultMessages = $conn->query($sqlMessages);
+    if ($resultMessages && $resultMessages->num_rows > 0) {
+        while ($row = $resultMessages->fetch_assoc()) {
+            $dateObj = new DateTime($row['created_at']);
+            $row['formatted_date'] = $dateObj->format('d M Y, g:ia');
+            $adminMessages[] = $row;
+        }
+    }
+} catch (mysqli_sql_exception $e) {
+    $adminMessages = [];
+}
+
 // Load pending room requests so the admin can approve or reject them.
 $meetingRequests = [];
 try {
@@ -448,7 +467,7 @@ $conn->close();
         .header-container {
             position: relative;
             width: 100%;
-            height: 120px; /* Height of the dark blue area */
+            height: 120px;
             background-color: #11072b;
             color: white;
             padding: 40px 60px;
@@ -457,10 +476,9 @@ $conn->close();
             align-items: flex-start;
         }
 
-        /* The smooth bottom wave using SVG */
         .header-wave {
             position: absolute;
-            top: 100%; /* Positions the wave exactly below the header */
+            top: 100%;
             left: 0;
             width: 100%;
             height: 100px;
@@ -497,10 +515,6 @@ $conn->close();
         /* --- Left Column: Meetings --- */
         .meetings-section {
             flex: 2;
-        }
-
-        .meetings-box {
-            /* Box removed for cleaner card look */
         }
 
         .meetings-grid {
@@ -544,7 +558,7 @@ $conn->close();
         }
 
 
-        /* Card Action Buttons (Check/Trash) */
+        /* Card Action Buttons */
         .card-actions {
             display: flex;
             flex-direction: row;
@@ -575,7 +589,6 @@ $conn->close();
         .btn-edit-meeting { background-color: #f6d365; color: #000; }
         .btn-trash { background-color: #9d8bb8; color: #000; }
 
-        /* Pagination inside grey box */
         .pagination {
             text-align: center;
             margin-top: 20px;
@@ -585,7 +598,6 @@ $conn->close();
             cursor: pointer;
         }
 
-        /* Bottom Action Buttons */
         .action-buttons {
             display: flex;
             justify-content: space-between;
@@ -724,12 +736,6 @@ $conn->close();
             justify-content: center;
         }
 
-        .more-users {
-            color: #999;
-            font-size: 1.5rem;
-            margin: 15px 0;
-        }
-
         .btn-add-user {
             background: transparent;
             color: #11072b;
@@ -743,13 +749,8 @@ $conn->close();
         }
 
         /* --- Footer --- */
-        .footer {
-            padding: 0 60px 40px 60px;
-        }
-        .footer a {
-            color: #11072b;
-            font-size: 1.1rem;
-        }
+        .footer { padding: 0 60px 40px 60px; }
+        .footer a { color: #11072b; font-size: 1.1rem; }
 
         /* --- Modal Styles --- */
         .modal-overlay {
@@ -779,10 +780,8 @@ $conn->close();
         .modal-content input, .modal-content select { padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 1rem; }
         .modal-content button { background-color: #11072b; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-size: 1rem; transition: 0.3s; }
         .modal-content button:hover { background-color: #2b1154; }
-        .message-modal-content {
-            text-align: center;
-            max-width: 360px;
-        }
+        
+        .message-modal-content { text-align: center; max-width: 360px; }
         .message-icon {
             width: 56px;
             height: 56px;
@@ -793,59 +792,117 @@ $conn->close();
             margin: 0 auto 16px;
             font-size: 1.5rem;
         }
-        .message-icon.success {
-            background: #d1e7dd;
-            color: #0f5132;
-        }
-        .message-icon.error {
-            background: #f8d7da;
-            color: #842029;
-        }
-        .message-modal-content p {
-            color: #444;
-            line-height: 1.5;
-            margin-bottom: 22px;
-        }
-        .delete-modal-icon {
-            width: 48px;
-            height: 48px;
+        .message-icon.success { background: #d1e7dd; color: #0f5132; }
+        .message-icon.error { background: #f8d7da; color: #842029; }
+        .message-modal-content p { color: #444; line-height: 1.5; margin-bottom: 22px; }
+        
+        /* --- Floating Icon for Messages --- */
+        .message-request-icon {
+            position: fixed;
+            bottom: 1rem;
+            left: 1rem;
+            z-index: 1000;
+            cursor: pointer;
+            transition: transform 0.2s;
             border-radius: 50%;
-            background: #f8d7da;
-            color: #842029;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            /* Adds a slight dark background so the icon stands out clearly */
+            background: #11072b; 
+            padding: 10px;
+        }
+        .message-request-icon:hover {
+            transform: scale(1.05);
+        }
+
+        /* --- Message Request Modal styling --- */
+        .message-request-content {
+            background: #11062b; /* Match screenshot dark purple */
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 450px;
+            position: relative;
+        }
+        .message-request-content h2 {
+            margin-bottom: 5px;
+            color: white;
+            text-transform: uppercase;
+            font-size: 1.3rem;
+            letter-spacing: 0.5px;
+        }
+        .message-request-divider {
+            height: 4px;
+            background: white;
+            width: 100%;
+            margin-bottom: 25px;
+            border-radius: 2px;
+        }
+        .message-request-content .close-modal {
+            color: white;
+        }
+        .message-request-content .close-modal:hover {
+            color: #ccc;
+        }
+
+        .message-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .message-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .message-list::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 10px;
+        }
+
+        .message-item {
+            background: #d9d9d9;
+            border-radius: 20px;
+            padding: 15px 20px;
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-size: 1.4rem;
-            margin-bottom: 15px;
-        }
-        .delete-modal-copy {
-            color: #444;
-            line-height: 1.5;
-            margin-bottom: 20px;
-        }
-        .delete-modal-actions {
-            display: flex;
-            gap: 12px;
-            justify-content: flex-end;
-        }
-        .delete-modal-actions .btn-cancel-delete {
-            background: #e9ecef;
+            gap: 15px;
             color: #11072b;
+            cursor: pointer;
+            transition: background 0.2s;
         }
-        .delete-modal-actions .btn-cancel-delete:hover {
-            background: #dfe3e7;
+        .message-item:hover {
+            background: #c0c0c0;
         }
-        .delete-modal-actions .btn-confirm-delete {
-            background: #b02a37;
+        .message-item-icon {
+            width: 35px;
+            height: 35px;
+            flex-shrink: 0;
+            filter: invert(10%) sepia(45%) saturate(3027%) hue-rotate(249deg) brightness(88%) contrast(105%); /* Adjust icon to match dark text color */
         }
-        .delete-modal-actions .btn-confirm-delete:hover {
-            background: #842029;
+        .message-item-text {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
         }
+        .message-item-name {
+            font-weight: bold;
+            font-size: 0.95rem;
+        }
+        .message-item-title {
+            font-size: 0.85rem;
+            color: #444;
+            overflow-wrap: anywhere;
+        }
+        .message-item-meta {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
     </style>
 </head>
 <body>
 
-    <!-- Top banner with the admin greeting and logout link. -->
     <header class="header-container">
         <h1>Hello, {<?php echo $adminName; ?>}</h1>
         <a href="login.php" class="logout-btn">Logout</a>
@@ -854,7 +911,6 @@ $conn->close();
 
     <main class="main-content">
         
-        <!-- Left side: meeting controls and meeting cards. -->
         <section class="meetings-section">
             <div class="action-buttons">
                 <a href="admin.php?action=export_meetings">Export as .csv</a>
@@ -864,7 +920,6 @@ $conn->close();
             <div class="meetings-box">
                 <div class="meetings-grid">
                     
-                    <!-- Each meeting becomes one card with actions for end, edit, and delete. -->
                     <?php foreach ($meetings as $meeting): ?>
                         <div class="meeting-card">
                             <div class="meeting-info">
@@ -925,14 +980,12 @@ $conn->close();
 
         <div class="divider"></div>
 
-        <!-- Right side: requests, reserved rooms, and user management. -->
         <section class="users-section">
             <h2>Meeting Requests</h2>
             <div class="users-list">
                 <?php if (empty($meetingRequests)): ?>
                     <p style="color: #666; font-style: italic; text-align: center;">No pending requests.</p>
                 <?php else: ?>
-                    <!-- Requests submitted by users need an approve or reject decision. -->
                     <?php foreach ($meetingRequests as $request): ?>
                         <div class="request-card">
                             <h3><?php echo htmlspecialchars($request['title']); ?></h3>
@@ -964,7 +1017,6 @@ $conn->close();
                 <?php if (empty($reservedRooms)): ?>
                     <p style="color: #666; font-style: italic; text-align: center;">No rooms reserved.</p>
                 <?php else: ?>
-                    <!-- Reserved rooms are taken from upcoming meetings. -->
                     <?php foreach ($reservedRooms as $room): ?>
                         <div class="user-card">
                             <div class="user-info">
@@ -981,7 +1033,6 @@ $conn->close();
                 <?php if (empty($users)): ?>
                     <p style="color: #666; font-style: italic; text-align: center;">No users found.</p>
                 <?php else: ?>
-                    <!-- User cards let the admin edit or delete each account. -->
                     <?php foreach ($users as $user): ?>
                         <div class="user-card">
                             <div class="user-info">
@@ -1015,12 +1066,13 @@ $conn->close();
                         
         </section>
 
+        <input class="message-request-icon" id="messageRequestBtn" type="image" src="smsicon.svg" width="60" height="60" alt="View Messages">
+
     </main>
 
     <footer class="footer">
     </footer>
 
-    <!-- Feedback popup shown after successful or failed actions. -->
     <?php if (!empty($message)): ?>
         <div id="messageModal" class="modal-overlay" style="display: flex;">
             <div class="modal-content message-modal-content">
@@ -1035,29 +1087,27 @@ $conn->close();
         </div>
     <?php endif; ?>
 
-    <!-- Delete Meeting Confirmation Modal -->
     <div id="deleteMeetingModal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content" style="text-align: center;">
             <span class="close-modal" id="closeDeleteMeetingModal">&times;</span>
-            <div class="delete-modal-icon">
+            <div class="message-icon error">
                 <i class="fa-solid fa-trash-can"></i>
             </div>
             <h2>Delete Meeting</h2>
-            <p class="delete-modal-copy">
+            <p style="color: #444; line-height: 1.5; margin-bottom: 20px;">
                 Are you sure you want to delete <strong id="deleteMeetingTitle">this meeting</strong>? This action cannot be undone.
             </p>
             <form action="admin.php" method="POST" id="deleteMeetingForm">
                 <input type="hidden" name="action" value="delete_meeting">
                 <input type="hidden" name="meeting_id" id="deleteMeetingId">
-                <div class="delete-modal-actions">
-                    <button type="button" class="btn-cancel-delete" id="cancelDeleteMeetingBtn">Cancel</button>
-                    <button type="submit" class="btn-confirm-delete">Delete</button>
+                <div style="display: flex; gap: 12px; justify-content: center;">
+                    <button type="button" id="cancelDeleteMeetingBtn" style="background: #e9ecef; color: #11072b;">Cancel</button>
+                    <button type="submit" style="background: #b02a37;">Delete</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Edit Meeting Modal -->
     <div id="editMeetingModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeEditMeetingModal">&times;</span>
@@ -1088,7 +1138,6 @@ $conn->close();
         </div>
     </div>
 
-    <!-- Edit User Modal -->
     <div id="editUserModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeModal">&times;</span>
@@ -1107,7 +1156,6 @@ $conn->close();
         </div>
     </div>
 
-    <!-- Add User Modal -->
     <div id="addUserModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeAddUserModal">&times;</span>
@@ -1127,7 +1175,6 @@ $conn->close();
         </div>
     </div>
 
-    <!-- Add Meeting Modal -->
     <div id="addMeetingModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeAddMeetingModal">&times;</span>
@@ -1150,7 +1197,6 @@ $conn->close();
         </div>
     </div>
 
-    <!-- Reserve Room Modal -->
     <div id="reserveRoomModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" id="closeReserveRoomModal">&times;</span>
@@ -1166,6 +1212,36 @@ $conn->close();
                 <input type="text" name="meeting_room" placeholder="Enter Room Number" required>
                 <button type="submit">Confirm Reservation</button>
             </form>
+        </div>
+    </div>
+
+    <div id="messageRequestModal" class="modal-overlay">
+        <div class="message-request-content">
+            <span class="close-modal" id="closeMessageRequestModal">&times;</span>
+            <h2>MESSAGE REQUEST</h2>
+            <div class="message-request-divider"></div>
+            
+            <div class="message-list">
+                <?php if (empty($adminMessages)): ?>
+                    <p style="color: #ccc; font-style: italic; text-align: center;">No new message requests.</p>
+                <?php else: ?>
+                    <?php foreach ($adminMessages as $msg): ?>
+                        <?php
+                            $alertMessage = "Message from " . $msg['sender_name'] . " <" . $msg['sender_email'] . ">\n";
+                            $alertMessage .= "Sent: " . $msg['formatted_date'] . "\n\n";
+                            $alertMessage .= $msg['content'];
+                        ?>
+                        <div class="message-item" onclick="alert(<?php echo htmlspecialchars(json_encode($alertMessage), ENT_QUOTES, 'UTF-8'); ?>)">
+                            <img src="smsicon.svg" class="message-item-icon" alt="Message Icon">
+                            <div class="message-item-text">
+                                <span class="message-item-name"><?php echo htmlspecialchars($msg['sender_name']); ?></span>
+                                <span class="message-item-title">"<?php echo htmlspecialchars($msg['subject']); ?>"</span>
+                                <span class="message-item-meta"><?php echo htmlspecialchars($msg['sender_email']); ?> | <?php echo htmlspecialchars($msg['formatted_date']); ?></span>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
@@ -1301,29 +1377,29 @@ $conn->close();
 
         closeEditMeetingModalBtn.addEventListener('click', () => editMeetingModal.style.display = 'none');
 
+        // View Message Requests Logic
+        const messageRequestModal = document.getElementById('messageRequestModal');
+        const messageRequestBtn = document.getElementById('messageRequestBtn');
+        const closeMessageRequestModalBtn = document.getElementById('closeMessageRequestModal');
+
+        messageRequestBtn.addEventListener('click', () => {
+            messageRequestModal.style.display = 'flex';
+        });
+
+        closeMessageRequestModalBtn.addEventListener('click', () => {
+            messageRequestModal.style.display = 'none';
+        });
+
         // Clicking the dark background outside a popup closes that popup.
         window.addEventListener('click', (e) => {
-            if (e.target === messageModal) {
-                closeMessageModal();
-            }
-            if (e.target === deleteMeetingModal) {
-                closeDeleteMeetingModal();
-            }
-            if (e.target === editMeetingModal) {
-                editMeetingModal.style.display = 'none';
-            }
-            if (e.target === editModal) {
-                editModal.style.display = 'none';
-            }
-            if (e.target === addUserModal) {
-                addUserModal.style.display = 'none';
-            }
-            if (e.target === addMeetingModal) {
-                addMeetingModal.style.display = 'none';
-            }
-            if (e.target === reserveRoomModal) {
-                reserveRoomModal.style.display = 'none';
-            }
+            if (e.target === messageModal) closeMessageModal();
+            if (e.target === deleteMeetingModal) closeDeleteMeetingModal();
+            if (e.target === editMeetingModal) editMeetingModal.style.display = 'none';
+            if (e.target === editModal) editModal.style.display = 'none';
+            if (e.target === addUserModal) addUserModal.style.display = 'none';
+            if (e.target === addMeetingModal) addMeetingModal.style.display = 'none';
+            if (e.target === reserveRoomModal) reserveRoomModal.style.display = 'none';
+            if (e.target === messageRequestModal) messageRequestModal.style.display = 'none';
         });
     </script>
     <script>
