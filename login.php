@@ -90,6 +90,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <input type="hidden" name="captcha_verified" id="captcha_verified" value="0">
             </form>
             
+            <p class="reset-link">
+                <a href="reset_password.php">Forgot Password?</a>
+            </p>
+            
             <p class="signup-link">
                 Create a new account? <a href="signup.php">Sign up</a>
             </p>

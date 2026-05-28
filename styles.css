@@ -249,6 +249,72 @@
             font-weight: bold;
         }
 
+        /* Reset Password Link */
+        .reset-link {
+            margin-top: 20px;
+            color: #2b1154;
+            font-size: 0.9rem;
+        }
+
+        .reset-link a {
+            color: #2b1154;
+            text-decoration: underline;
+            font-weight: bold;
+        }
+
+        /* Reset Password Subtitle */
+        .reset-subtitle {
+            color: #887a9e;
+            font-size: 0.9rem;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        /* Step Information */
+        .step-info {
+            color: #887a9e;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+        }
+
+        .reset-password-page .form-wrapper {
+            max-width: 470px;
+        }
+
+        .reset-password-page h1 {
+            margin-bottom: 56px;
+            line-height: 1.2;
+        }
+
+        .reset-password-page .reset-subtitle {
+            max-width: 440px;
+            margin: 0 auto 28px;
+            color: #000000;
+            font-size: 1rem;
+            line-height: 1.25;
+            text-align: center;
+        }
+
+        .reset-password-page .form-box {
+            gap: 22px;
+        }
+
+        .reset-password-page .form-box button {
+            width: 180px;
+            min-height: 58px;
+            margin-top: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
+        .reset-password-page .reset-link {
+            margin-top: 12px;
+            font-size: 1rem;
+        }
+
         /* PHP Message Alert */
         .alert {
             margin-bottom: 20px;
