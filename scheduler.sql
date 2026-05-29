@@ -264,3 +264,53 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+
+--
+-- Table structure for table `events`
+--
+
+CREATE TABLE IF NOT EXISTS `events` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `image_path` varchar(255) NOT NULL,
+  `description` text,
+  `room` varchar(100) DEFAULT NULL,
+  `date` date NOT NULL,
+  `start_time` time NOT NULL,
+  `end_time` time NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- Sample data for table `events`
+--
+
+INSERT INTO `events` (`title`, `image_path`, `description`, `room`, `date`, `start_time`, `end_time`) VALUES
+('International Jazz Festival', 'https://via.placeholder.com/400x300.png?text=Jazz+Poster', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.', 'Room 606', '2019-07-19', '19:00:00', '22:00:00'),
+('TechEdu Conference', 'https://via.placeholder.com/400x300.png?text=TechEdu+Poster', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.', 'Room 101', '2024-08-05', '09:00:00', '17:00:00');
+
+--
+-- Table structure for table `event_gallery`
+--
+
+CREATE TABLE IF NOT EXISTS `event_gallery` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `event_id` int(11) NOT NULL,
+  `image_path` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `event_id` (`event_id`),
+  CONSTRAINT `event_gallery_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- Table structure for table `user_events`
+--
+
+CREATE TABLE IF NOT EXISTS `user_events` (
+  `user_id` int(11) NOT NULL,
+  `event_id` int(11) NOT NULL,
+  PRIMARY KEY (`user_id`,`event_id`),
+  KEY `event_id` (`event_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;

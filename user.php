@@ -762,6 +762,7 @@ $conn->close();
         <section class="left-panel">
             <div class="request-toolbar">
                 <button type="button" id="requestRoomBtn" class="btn-request-room">Request Room</button>
+                <a href="events.php" class="btn-request-room">Events</a>
                 <button type="button" id="meetingHistoryBtn" class="btn-request-room">Meeting History</button>
             </div>
             

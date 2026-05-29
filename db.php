@@ -51,4 +51,31 @@ $conn->query("
         CONSTRAINT fk_admin_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL
     )
 ");
+
+
+// Stores primary event details (Posters, titles, dates)
+$conn->query("
+    CREATE TABLE IF NOT EXISTS events (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        image_path VARCHAR(255) NULL,
+        description TEXT,
+        room VARCHAR(100) DEFAULT NULL,
+        date DATE NOT NULL,
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+");
+
+// Stores multiple recap photos tied to a specific event
+$conn->query("
+    CREATE TABLE IF NOT EXISTS event_gallery (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        event_id INT UNSIGNED NOT NULL,
+        image_path VARCHAR(255) NOT NULL,
+        uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_event_gallery FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+    )
+");
 ?>
