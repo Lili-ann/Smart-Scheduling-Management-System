@@ -2,9 +2,14 @@
 session_start();
 require_once "db.php";
 
-// 1. Security Check: Only Users allowed
-if (($_SESSION['user_role'] ?? '') !== 'User') {
-    header("Location: login.php?error=Please log in as a user to access that page");
+$isVisitor = !empty($_SESSION['visitor_access']);
+$isAdmin = (($_SESSION['user_role'] ?? '') === 'Admin');
+$isStaff = (($_SESSION['user_role'] ?? '') === 'User');
+$userId = (int)($_SESSION['user_id'] ?? 0);
+
+// Staff/Admin can use login. Visitors can view after entering an invitation code.
+if (!$isStaff && !$isAdmin && !$isVisitor) {
+    header("Location: login.php?error=Please log in or enter a visitor code to view event details");
     exit();
 }
 
@@ -16,7 +21,12 @@ if ($eventId <= 0) {
 }
 
 // 3. Fetch Event Details
-$stmt = $conn->prepare("SELECT * FROM events WHERE id = ?");
+$stmt = $conn->prepare(
+    "SELECT e.*, u.fullname AS assigned_staff_name
+     FROM events e
+     LEFT JOIN users u ON u.id = e.assigned_staff_id
+     WHERE e.id = ?"
+);
 $stmt->bind_param("i", $eventId);
 $stmt->execute();
 $eventResult = $stmt->get_result();
@@ -26,6 +36,11 @@ if ($eventResult->num_rows === 0) {
 }
 $event = $eventResult->fetch_assoc();
 $stmt->close();
+
+if ($isStaff && (int)($event['assigned_staff_id'] ?? 0) !== $userId) {
+    header("Location: events.php?error=You can only view events assigned to you");
+    exit();
+}
 
 // 4. Fetch Gallery Images for this event
 $galleryStmt = $conn->prepare("SELECT image_path FROM event_gallery WHERE event_id = ? ORDER BY id ASC");
@@ -45,6 +60,7 @@ $formattedDate = $dateObj->format('M d, Y');
 $startObj = new DateTime($event['start_time']);
 $endObj = new DateTime($event['end_time']);
 $formattedTime = $startObj->format('h:i A') . ' - ' . $endObj->format('h:i A');
+$backUrl = $isVisitor ? 'events.php' : ($isAdmin ? 'admin.php' : 'events.php');
 
 ?>
 <!DOCTYPE html>
@@ -289,7 +305,7 @@ $formattedTime = $startObj->format('h:i A') . ' - ' . $endObj->format('h:i A');
 
     <main class="main-content">
         <div class="back-btn-wrapper">
-            <a href="events.php" class="back-btn">
+            <a href="<?php echo htmlspecialchars($backUrl); ?>" class="back-btn">
                 <i class="fas fa-arrow-left"></i> Back to Events
             </a>
         </div>
@@ -317,6 +333,10 @@ $formattedTime = $startObj->format('h:i A') . ' - ' . $endObj->format('h:i A');
                         <tr>
                             <td><i class="fas fa-map-marker-alt"></i> Location</td>
                             <td><?php echo htmlspecialchars($event['room']); ?></td>
+                        </tr>
+                        <tr>
+                            <td><i class="fas fa-user-tie"></i> Staff</td>
+                            <td><?php echo htmlspecialchars($event['assigned_staff_name'] ?? 'Unassigned'); ?></td>
                         </tr>
                     </table>
                 </div>

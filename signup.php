@@ -13,6 +13,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $fullname = trim($_POST['fullname'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
+    $confirmPassword = $_POST['confirm_password'] ?? '';
     $role = trim($_POST['role'] ?? '');
     $allowedRoles = ['Admin', 'User'];
 
@@ -36,11 +37,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     // Validate all form inputs before saving the new account.
-    if (!empty($fullname) && !empty($email) && !empty($password) && !empty($role)) {
+    if (!empty($fullname) && !empty($email) && !empty($password) && !empty($confirmPassword) && !empty($role)) {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $message = "Please enter a valid email address.";
         } elseif (!in_array($role, $allowedRoles, true)) {
             $message = "Please select a valid role.";
+        } elseif ($password !== $confirmPassword) {
+            $message = "Passwords do not match.";
         } elseif (!empty($passwordErrors)) {
             $message = "Password must include: " . implode(", ", $passwordErrors) . ".";
         } else {
@@ -85,16 +88,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Create Account - Sign Up</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="signup-page">
 
     <!-- Signup form shown to new users. -->
     <div class="form-section">
-        <div class="form-wrapper">
+        <div class="form-wrapper signup-wrapper">
             
             <!-- Show validation or success messages above the form. -->
             <?php if(!empty($message)): ?>
                 <div class="alert <?php echo $messageType; ?>"><?php echo htmlspecialchars($message); ?></div>
             <?php endif; ?>
+
+            <div class="access-toggle" aria-label="Choose access type">
+                <a href="signup.php" class="access-toggle-option active">PIC / STAFF</a>
+                <a href="visitor.php" class="access-toggle-option">VISITOR</a>
+            </div>
 
             <h1>SIGN UP</h1>
             
@@ -105,9 +113,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <select name="role" required>
                     <option value="" disabled <?php echo $role === '' ? 'selected' : ''; ?> hidden>Select Role</option>
                     <option value="Admin" <?php echo $role === 'Admin' ? 'selected' : ''; ?>>Admin</option>
-                    <option value="User" <?php echo $role === 'User' ? 'selected' : ''; ?>>User</option>
+                    <option value="User" <?php echo $role === 'User' ? 'selected' : ''; ?>>Staff</option>
                 </select>
                 <input type="password" name="password" placeholder="Create Password" required>
+                <input type="password" name="confirm_password" placeholder="Confirm Password" required>
                 <button type="submit">SIGN UP</button>
             </form>
             

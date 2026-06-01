@@ -4,15 +4,17 @@ require_once "db.php";
 
 /** @var mysqli $conn */
 
-// Only normal users are allowed to open this page.
-// Admins or guests are sent back to login.
-if (($_SESSION['user_role'] ?? '') !== 'User') {
-    header("Location: login.php?error=Please log in as a user to access that page");
+$isVisitor = !empty($_SESSION['visitor_access']);
+$isStaff = (($_SESSION['user_role'] ?? '') === 'User');
+
+// Staff use this page for assigned events. Visitors use it after entering an invitation code.
+if (!$isStaff && !$isVisitor) {
+    header("Location: login.php?error=Please log in as staff or enter a visitor code to access events");
     exit();
 }
 
 // Basic user information and arrays used to build the dashboard.
-$userName = $_SESSION['user_name'] ?? "User";
+$userName = $isVisitor ? 'Visitor' : ($_SESSION['user_name'] ?? "User");
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $message = '';
 $messageType = 'error';
@@ -33,6 +35,11 @@ function isUserJoined($conn, $userId, $eventId) {
 
 // Handler for user joining an event
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'join_event') {
+    if ($isVisitor) {
+        header("Location: events.php?error=Visitors can view events only");
+        exit();
+    }
+
     $eventId = (int)($_POST['event_id'] ?? 0);
     if ($userId > 0 && $eventId > 0 && !isUserJoined($conn, $userId, $eventId)) {
         try {
@@ -52,6 +59,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'join_
 // Handler for marking attendance from modal
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'mark_event_attendance') {
     header('Content-Type: application/json');
+    if ($isVisitor) {
+        echo json_encode(['success' => false]);
+        exit();
+    }
+
     $eventId = (int)($_POST['event_id'] ?? 0);
     $attendanceStatus = $_POST['status'] ?? '';
     // Attendance logic for events (could be different than regular meetings)
@@ -60,10 +72,29 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'mark_
     exit();
 }
 
-// Load upcoming events
+// Load events. Staff only see assigned events; visitors can view all events.
 $upcomingEvents = [];
 try {
-    $stmt = $conn->prepare("SELECT id, title, image_path, description, room, date, start_time, end_time FROM events WHERE date < CURDATE() ORDER BY date DESC, start_time DESC");    $stmt->execute();
+    if ($isVisitor) {
+        $stmt = $conn->prepare(
+            "SELECT e.id, e.title, e.image_path, e.description, e.room, e.date, e.start_time, e.end_time,
+                    u.fullname AS assigned_staff_name
+             FROM events e
+             LEFT JOIN users u ON u.id = e.assigned_staff_id
+             ORDER BY e.date ASC, e.start_time ASC"
+        );
+    } else {
+        $stmt = $conn->prepare(
+            "SELECT e.id, e.title, e.image_path, e.description, e.room, e.date, e.start_time, e.end_time,
+                    u.fullname AS assigned_staff_name
+             FROM events e
+             LEFT JOIN users u ON u.id = e.assigned_staff_id
+             WHERE e.assigned_staff_id = ?
+             ORDER BY e.date ASC, e.start_time ASC"
+        );
+        $stmt->bind_param("i", $userId);
+    }
+    $stmt->execute();
     $result = $stmt->get_result();
     if ($result && $result->num_rows > 0) {
         while ($row = $result->fetch_assoc()) {
@@ -73,7 +104,7 @@ try {
             
             $row['formatted_date'] = $dateObj->format('M d, Y');
             $row['formatted_time'] = $startObj->format('g:ia') . ' - ' . $endObj->format('g:ia');
-            $row['user_joined'] = isUserJoined($conn, $userId, $row['id']);
+            $row['user_joined'] = $isVisitor ? false : isUserJoined($conn, $userId, $row['id']);
             $upcomingEvents[] = $row;
         }
     }
@@ -216,6 +247,7 @@ $conn->close();
 
         .event-card-body h3 { font-size: 1.25rem; font-weight: bold; margin-bottom: 5px; }
         .event-card-body p { font-size: 0.8rem; line-height: 1.4; }
+        .event-assigned-staff { font-size: 0.75rem; color: #e8ddff; font-weight: 600; }
 
         .event-card-footer { position: relative; margin-top: auto; display: flex; justify-content: flex-end; padding: 10px 20px 20px; }
         .join-btn, .details-btn {
@@ -390,9 +422,9 @@ $conn->close();
     <header class="header-container">
         <div class="header-left">
             <h1>Hello, {<?php echo htmlspecialchars($userName); ?>}</h1>
-            <a href="user.php" class="back-btn">Back</a>
+            <a href="<?php echo $isVisitor ? 'visitor.php' : 'user.php'; ?>" class="back-btn">Back</a>
         </div>
-        <a href="login.php" class="logout-btn">Logout</a>
+        <a href="<?php echo $isVisitor ? 'visitor.php' : 'login.php'; ?>" class="logout-btn"><?php echo $isVisitor ? 'Exit' : 'Logout'; ?></a>
         <div class="header-wave"></div>
     </header>
 
@@ -401,7 +433,7 @@ $conn->close();
         
         <div class="cards-grid">
             <?php if (empty($upcomingEvents)): ?>
-                <p class="empty-state">No upcoming events listed yet.</p>
+                <p class="empty-state"><?php echo $isVisitor ? 'No events listed yet.' : 'No events assigned to you yet.'; ?></p>
             <?php else: ?>
                 <?php foreach ($upcomingEvents as $event): ?>
                     <div class="event-card">
@@ -410,16 +442,20 @@ $conn->close();
                             <div class="event-card-body">
                                 <h3><?php echo htmlspecialchars($event['title']); ?></h3>
                                 <p><?php echo htmlspecialchars($event['description']); ?></p>
+                                <span class="event-assigned-staff">Staff: <?php echo htmlspecialchars($event['assigned_staff_name'] ?? 'Unassigned'); ?></span>
                             </div>
                         </div>
                         <div class="event-card-footer">
-                                <a href="event_details.php?id=<?php echo $event['id']; ?>" class="details-btn" style="text-decoration: none;">View Details</a>                            <form action="events.php" method="POST" style="display:inline;">
+                                <a href="event_details.php?id=<?php echo $event['id']; ?>" class="details-btn" style="text-decoration: none;"><?php echo $isVisitor ? 'View Details' : 'View / Edit Details'; ?></a>
+                            <?php if (!$isVisitor): ?>
+                            <form action="events.php" method="POST" style="display:inline;">
                                 <input type="hidden" name="action" value="join_event">
                                 <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
                                 <button type="submit" class="join-btn" <?php echo $event['user_joined'] ? 'disabled' : ''; ?>>
                                     <?php echo $event['user_joined'] ? 'Joined' : 'JOIN'; ?>
                                 </button>
                             </form>
+                            <?php endif; ?>
                         </div>
                     </div>
                 <?php endforeach; ?>

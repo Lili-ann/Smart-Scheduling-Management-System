@@ -18,7 +18,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         header("Location: login.php?error=Please complete the CAPTCHA verification");
         exit();
     } else {
-        $stmt = $conn->prepare("SELECT id, fullname, password_hash, role FROM users WHERE email = ?");
+        $stmt = $conn->prepare("SELECT id, fullname, email, password_hash, role FROM users WHERE email = ?");
         if ($stmt) {
             $stmt->bind_param("s", $email);
             $stmt->execute();
@@ -75,11 +75,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 <!-- LOGIN FORM -->
     <div class="form-section">
-        <div class="form-wrapper">
+        <div class="form-wrapper login-wrapper">
             
             <?php if(!empty($message)): ?>
                 <div class="alert"><?php echo $message; ?></div>
             <?php endif; ?>
+
+            <div class="access-toggle" aria-label="Choose access type">
+                <a href="login.php" class="access-toggle-option active">PIC / STAFF</a>
+                <a href="visitor.php" class="access-toggle-option">VISITOR</a>
+            </div>
 
             <h1>WELCOME BACK</h1>
             
