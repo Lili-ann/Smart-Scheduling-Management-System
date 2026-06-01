@@ -352,22 +352,17 @@ $conn->close();
                                 <span class="<?php echo $badgeClass; ?>"><i class="fa-solid fa-user-tie"></i> <?php echo htmlspecialchars($staffName); ?></span>
                             </div>
                             <div class="event-actions">
-                                <button class="event-action-btn edit-event-btn" 
-                                    data-id="<?php echo $evt['id']; ?>"
-                                    data-title="<?php echo htmlspecialchars($evt['title'], ENT_QUOTES); ?>"
-                                    data-desc="<?php echo htmlspecialchars($evt['description'], ENT_QUOTES); ?>"
-                                    data-room="<?php echo htmlspecialchars($evt['room'], ENT_QUOTES); ?>"
-                                    data-date="<?php echo $evt['date']; ?>"
-                                    data-start="<?php echo $evt['start_time']; ?>"
-                                    data-end="<?php echo $evt['end_time']; ?>">
+                                <a href="admin_event.php?id=<?php echo (int)$evt['id']; ?>" class="event-action-btn" style="text-decoration:none;">
                                     <i class="fa-regular fa-pen-to-square"></i> Edit
-                                </button>
+                                </a>
+
                                 <button class="event-action-btn assign-staff-btn" 
                                     data-id="<?php echo $evt['id']; ?>" 
                                     data-title="<?php echo htmlspecialchars($evt['title'], ENT_QUOTES); ?>"
                                     data-staff="<?php echo $evt['assigned_staff_id']; ?>">
                                     <i class="fa-solid fa-user-plus"></i> Assign
                                 </button>
+
                             </div>
                         </div>
                     <?php endforeach; ?>

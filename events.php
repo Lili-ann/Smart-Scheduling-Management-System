@@ -6,6 +6,7 @@ require_once "db.php";
 
 $isVisitor = !empty($_SESSION['visitor_access']);
 $isStaff = (($_SESSION['user_role'] ?? '') === 'Staff');
+$isAdmin = (($_SESSION['user_role'] ?? '') === 'Admin');
 
 // Staff use this page for assigned events. Visitors use it after entering an invitation code.
 if (!$isStaff && !$isVisitor) {
@@ -18,6 +19,7 @@ $userName = $isVisitor ? 'Visitor' : ($_SESSION['user_name'] ?? "User");
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $message = '';
 $messageType = 'error';
+
 
 if (isset($_GET['error'])) {
     $message = trim($_GET['error']);
@@ -402,9 +404,10 @@ $conn->close();
 <body>
 
     <header class="header-container">
-            <a href="<?php echo $isVisitor ? 'visitor.php' : ($isAdmin ? 'admin.php' : 'user.php'); ?>" class="back-btn">
+            <a href="<?php echo $isVisitor ? 'visitor.php' : 'admin.php'; ?>" class="back-btn">
             <?php echo $isVisitor ? 'Exit' : 'Back'; ?>
         </a>        <div class="header-wave"></div>
+
 
     </header>
 
@@ -444,9 +447,16 @@ $conn->close();
                         </div>
                         <div class="event-card-footer">
                                 <a href="event_details.php?id=<?php echo $event['id']; ?>" class="details-btn" style="text-decoration: none;"><?php echo $isVisitor ? 'View Details' : 'View / Edit Details'; ?></a>
-                            <?php if (!$isVisitor): ?>
-                            <form action="events.php" method="POST" style="display:inline;">
+                                <?php if (!$isVisitor): ?>
+                                    <a href="admin_event.php?id=<?php echo (int)$event['id']; ?>" class="btn btn-outline" style="margin-right: 10px; text-decoration: none;">
+                                        Edit &amp; Manage Event
+                                    </a>
+                                <?php endif; ?>
+                                <?php if (!$isVisitor): ?>
+                                <form action="events.php" method="POST" style="display:inline;">
+
                                 <input type="hidden" name="action" value="join_event">
+
                                 <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
                                 <button type="submit" class="join-btn" <?php echo $event['user_joined'] ? 'disabled' : ''; ?>>
                                     <?php echo $event['user_joined'] ? 'Joined' : 'JOIN'; ?>

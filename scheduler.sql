@@ -104,4 +104,14 @@ CREATE TABLE `admin_messages` (
 INSERT INTO `admin_messages` (`sender_name`, `sender_email`, `subject`, `content`) VALUES
 ('John Doe', 'john@example.com', 'Visitor message regarding: AI & Future Tech Summit', 'Hi, I need help finding the location of this event. Is parking available?');
 
+-- Insert for generating code
+CREATE TABLE IF NOT EXISTS `visitor_codes` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `event_id` INT UNSIGNED NOT NULL,
+  `code` VARCHAR(50) NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_visitor_codes_events FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
 COMMIT;
