@@ -1,10 +1,11 @@
 // Change this name when you want browsers to replace the old cache.
-const CACHE_NAME = 'scheduler-cache-v1';
+const CACHE_NAME = 'scheduler-cache-v2';
 
 // Files saved during installation so the app can still load basic screens offline.
 const STATIC_ASSETS = [
     './login.php',
     './signup.php',
+    './visitor.php',
     './styles.css',
     './manifest.json',
     './captcha.png'

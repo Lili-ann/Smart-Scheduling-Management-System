@@ -15,7 +15,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
     $role = trim($_POST['role'] ?? '');
-    $allowedRoles = ['Admin', 'User'];
+    $allowedRoles = ['Admin', 'Staff'];
 
     // Build a list of missing password requirements.
     $passwordErrors = [];
@@ -113,7 +113,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <select name="role" required>
                     <option value="" disabled <?php echo $role === '' ? 'selected' : ''; ?> hidden>Select Role</option>
                     <option value="Admin" <?php echo $role === 'Admin' ? 'selected' : ''; ?>>Admin</option>
-                    <option value="User" <?php echo $role === 'User' ? 'selected' : ''; ?>>Staff</option>
+                    <option value="Staff" <?php echo $role === 'Staff' ? 'selected' : ''; ?>>Staff</option>
                 </select>
                 <input type="password" name="password" placeholder="Create Password" required>
                 <input type="password" name="confirm_password" placeholder="Confirm Password" required>

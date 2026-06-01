@@ -3,445 +3,189 @@ session_start();
 require_once "db.php";
 
 // Only admins are allowed to open this page.
-// If a normal user tries to access it, send them back to login.
 if (($_SESSION['user_role'] ?? '') !== 'Admin') {
     header("Location: login.php?error=Please log in as an admin to access that page");
     exit();
 }
 
-// Basic values used by the page and feedback popups.
 $adminName = $_SESSION['user_name'] ?? "Admin";
 $message = '';
 $messageType = 'error';
 
-// Download all meetings as a CSV file when the admin clicks "Export as .csv".
-if (($_GET['action'] ?? '') === 'export_meetings') {
-    $filename = 'meetings-' . date('Y-m-d') . '.csv';
+// --- 1. HANDLE POST REQUESTS ---
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $action = $_POST['action'] ?? '';
 
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-
-    $output = fopen('php://output', 'w');
-    fputcsv($output, ['ID', 'Status', 'Title', 'PIC', 'Attendees', 'Room', 'Date', 'Start Time', 'End Time', 'Created By', 'Created At']);
-
-    try {
-        $sql = "SELECT m.id, m.status, m.title, m.pic, m.attendees, m.room, m.date, m.start_time, m.end_time, u.fullname AS created_by, m.created_at
-                FROM meetings m
-                LEFT JOIN users u ON u.id = m.created_by
-                ORDER BY m.date ASC, m.start_time ASC";
-        $result = $conn->query($sql);
-
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                fputcsv($output, [
-                    $row['id'],
-                    $row['status'],
-                    $row['title'],
-                    $row['pic'],
-                    $row['attendees'],
-                    $row['room'],
-                    $row['date'],
-                    $row['start_time'],
-                    $row['end_time'],
-                    $row['created_by'] ?? '',
-                    $row['created_at']
-                ]);
-            }
-        }
-    } catch (mysqli_sql_exception $e) {
-        fputcsv($output, ['Export failed']);
-    }
-
-    fclose($output);
-    $conn->close();
-    exit();
-}
-
-// Create a new meeting after the admin fills in meeting details and chooses a room.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'add_meeting') {
-    $title = trim($_POST['meeting_title'] ?? '');
-    $pic = trim($_POST['meeting_pic'] ?? '');
-    $attendees = (int)($_POST['meeting_attendees'] ?? 0);
-    $date = trim($_POST['meeting_date'] ?? '');
-    $startTime = trim($_POST['meeting_start_time'] ?? '');
-    $endTime = trim($_POST['meeting_end_time'] ?? '');
-    $room = trim($_POST['meeting_room'] ?? '');
-    $createdBy = $_SESSION['user_id'] ?? null;
-
-    if ($title === '' || $pic === '' || $attendees <= 0 || $date === '' || $startTime === '' || $endTime === '' || $room === '') {
-        $message = "Please fill in all meeting fields.";
-    } elseif ($endTime <= $startTime) {
-        $message = "End time must be after start time.";
-    } else {
-        try {
-            $stmt = $conn->prepare("INSERT INTO meetings (status, title, pic, attendees, room, date, start_time, end_time, created_by) VALUES ('Upcoming', ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssissssi", $title, $pic, $attendees, $room, $date, $startTime, $endTime, $createdBy);
+    // --- EVENT ACTIONS ---
+    if ($action === 'assign_event_staff') {
+        $eventId = (int)($_POST['event_id'] ?? 0);
+        $staffId = !empty($_POST['staff_id']) ? (int)$_POST['staff_id'] : null;
+        if ($eventId > 0) {
+            $stmt = $conn->prepare("UPDATE events SET assigned_staff_id = ? WHERE id = ?");
+            $stmt->bind_param("ii", $staffId, $eventId);
             $stmt->execute();
-            $stmt->close();
-
-            header("Location: admin.php?success=Meeting created successfully");
+            header("Location: admin.php?success=Staff assigned to event successfully");
             exit();
-        } catch (mysqli_sql_exception $e) {
-            $message = "Could not create meeting. Please check the meeting table.";
         }
     }
-}
-
-// Mark an existing meeting as ended.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'end_meeting') {
-    $meetingId = (int)($_POST['meeting_id'] ?? 0);
-
-    if ($meetingId <= 0) {
-        $message = "Invalid meeting selected.";
-    } else {
-        try {
-            $stmt = $conn->prepare("UPDATE meetings SET status = 'Ended' WHERE id = ?");
-            $stmt->bind_param("i", $meetingId);
+    elseif ($action === 'edit_event') {
+        $eventId = (int)($_POST['event_id'] ?? 0);
+        $title = trim($_POST['title'] ?? '');
+        $desc = trim($_POST['description'] ?? '');
+        $room = trim($_POST['room'] ?? '');
+        $date = trim($_POST['date'] ?? '');
+        $start = trim($_POST['start_time'] ?? '');
+        $end = trim($_POST['end_time'] ?? '');
+        if ($eventId > 0 && $title !== '') {
+            $stmt = $conn->prepare("UPDATE events SET title = ?, description = ?, room = ?, date = ?, start_time = ?, end_time = ? WHERE id = ?");
+            $stmt->bind_param("ssssssi", $title, $desc, $room, $date, $start, $end, $eventId);
             $stmt->execute();
-            $stmt->close();
-
-            header("Location: admin.php?success=Meeting marked as ended");
+            header("Location: admin.php?success=Event updated successfully");
             exit();
-        } catch (mysqli_sql_exception $e) {
-            $message = "Could not update the meeting status.";
         }
     }
-}
+    elseif ($action === 'create_event') {
+        $title = trim($_POST['title'] ?? '');
+        $desc = trim($_POST['description'] ?? '');
+        $imagePath = trim($_POST['image_path'] ?? '');
+        $room = trim($_POST['room'] ?? '');
+        $date = trim($_POST['date'] ?? '');
+        $start = trim($_POST['start_time'] ?? '');
+        $end = trim($_POST['end_time'] ?? '');
+        
+        if ($imagePath === '') {
+            $imagePath = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
+        }
 
-// Delete a meeting after the admin confirms the delete popup.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'delete_meeting') {
-    $meetingId = (int)($_POST['meeting_id'] ?? 0);
-
-    if ($meetingId <= 0) {
-        $message = "Invalid meeting selected.";
-    } else {
-        try {
-            $stmt = $conn->prepare("DELETE FROM meetings WHERE id = ?");
-            $stmt->bind_param("i", $meetingId);
+        if ($title !== '' && $date !== '' && $start !== '' && $end !== '') {
+            $stmt = $conn->prepare("INSERT INTO events (title, description, image_path, room, date, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssssss", $title, $desc, $imagePath, $room, $date, $start, $end);
             $stmt->execute();
-            $stmt->close();
-
-            header("Location: admin.php?success=Meeting deleted successfully");
+            header("Location: admin.php?success=Event created successfully");
             exit();
-        } catch (mysqli_sql_exception $e) {
-            $message = "Could not delete the meeting.";
+        } else {
+            $message = "Please fill in all required event fields.";
         }
     }
-}
 
-// Save changes made from the edit meeting popup.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'update_meeting') {
-    $meetingId = (int)($_POST['meeting_id'] ?? 0);
-    $status = trim($_POST['meeting_status'] ?? '');
-    $title = trim($_POST['meeting_title'] ?? '');
-    $pic = trim($_POST['meeting_pic'] ?? '');
-    $attendees = (int)($_POST['meeting_attendees'] ?? 0);
-    $date = trim($_POST['meeting_date'] ?? '');
-    $startTime = trim($_POST['meeting_start_time'] ?? '');
-    $endTime = trim($_POST['meeting_end_time'] ?? '');
-    $room = trim($_POST['meeting_room'] ?? '');
-    $validStatuses = ['Upcoming', 'Ended', 'Cancelled'];
-
-    if ($meetingId <= 0) {
-        $message = "Invalid meeting selected.";
-    } elseif (!in_array($status, $validStatuses, true) || $title === '' || $pic === '' || $attendees <= 0 || $date === '' || $startTime === '' || $endTime === '' || $room === '') {
-        $message = "Please fill in all meeting fields.";
-    } elseif ($endTime <= $startTime) {
-        $message = "End time must be after start time.";
-    } else {
-        try {
-            $stmt = $conn->prepare("UPDATE meetings SET status = ?, title = ?, pic = ?, attendees = ?, room = ?, date = ?, start_time = ?, end_time = ? WHERE id = ?");
-            $stmt->bind_param("sssissssi", $status, $title, $pic, $attendees, $room, $date, $startTime, $endTime, $meetingId);
-            $stmt->execute();
-            $stmt->close();
-
-            header("Location: admin.php?success=Meeting updated successfully");
-            exit();
-        } catch (mysqli_sql_exception $e) {
-            $message = "Could not update the meeting.";
-        }
-    }
-}
-
-// Approve a user's room request.
-// This creates a real meeting and then marks the request as approved.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'approve_request') {
-    $requestId = (int)($_POST['request_id'] ?? 0);
-    $reviewedBy = $_SESSION['user_id'] ?? null;
-
-    if ($requestId <= 0) {
-        $message = "Invalid request selected.";
-    } else {
-        try {
-            $conn->begin_transaction();
-
-            $stmt = $conn->prepare("SELECT requester_id, title, pic, attendees, room, date, start_time, end_time FROM meeting_requests WHERE id = ? AND status = 'Pending'");
-            $stmt->bind_param("i", $requestId);
-            $stmt->execute();
-            $request = $stmt->get_result()->fetch_assoc();
-            $stmt->close();
-
-            if (!$request) {
-                throw new mysqli_sql_exception("Request not found or already reviewed.");
-            }
-
-            $stmt = $conn->prepare("INSERT INTO meetings (status, title, pic, attendees, room, date, start_time, end_time, created_by) VALUES ('Upcoming', ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param(
-                "ssissssi",
-                $request['title'],
-                $request['pic'],
-                $request['attendees'],
-                $request['room'],
-                $request['date'],
-                $request['start_time'],
-                $request['end_time'],
-                $request['requester_id']
-            );
-            $stmt->execute();
-            $stmt->close();
-
-            $stmt = $conn->prepare("UPDATE meeting_requests SET status = 'Approved', reviewed_by = ?, reviewed_at = NOW() WHERE id = ?");
-            $stmt->bind_param("ii", $reviewedBy, $requestId);
-            $stmt->execute();
-            $stmt->close();
-
-            $conn->commit();
-            header("Location: admin.php?success=Meeting request approved");
-            exit();
-        } catch (mysqli_sql_exception $e) {
-            $conn->rollback();
-            $message = "Could not approve the meeting request.";
-        }
-    }
-}
-
-// Reject a user's room request without creating a meeting.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'reject_request') {
-    $requestId = (int)($_POST['request_id'] ?? 0);
-    $reviewedBy = $_SESSION['user_id'] ?? null;
-
-    if ($requestId <= 0) {
-        $message = "Invalid request selected.";
-    } else {
-        try {
-            $stmt = $conn->prepare("UPDATE meeting_requests SET status = 'Rejected', reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND status = 'Pending'");
-            $stmt->bind_param("ii", $reviewedBy, $requestId);
-            $stmt->execute();
-            $affectedRows = $stmt->affected_rows;
-            $stmt->close();
-
-            if ($affectedRows < 1) {
-                $message = "This request has already been reviewed.";
-            } else {
-                header("Location: admin.php?success=Meeting request rejected");
+    // --- USER ACTIONS ---
+    elseif ($action === 'add_user') {
+        $fullname = trim($_POST['fullname'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $role = trim($_POST['role'] ?? '');
+        $password = $_POST['password'] ?? '';
+        
+        if ($fullname !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) && $password !== '') {
+            try {
+                $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $conn->prepare("INSERT INTO users (fullname, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())");
+                $stmt->bind_param("ssss", $fullname, $email, $passwordHash, $role);
+                $stmt->execute();
+                header("Location: admin.php?success=User added successfully");
                 exit();
-            }
-        } catch (mysqli_sql_exception $e) {
-            $message = "Could not reject the meeting request.";
+            } catch (mysqli_sql_exception $e) { $message = "Could not add user. Email may exist."; }
+        } else {
+            $message = "Invalid user data provided.";
         }
     }
-}
+    elseif ($action === 'update_user') {
+        $userId = (int)($_POST['user_id'] ?? 0);
+        $fullname = trim($_POST['fullname'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $role = trim($_POST['role'] ?? '');
 
-// Add a new user account from the admin dashboard.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'add_user') {
-    $fullname = trim($_POST['fullname'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $role = trim($_POST['role'] ?? '');
-    $password = $_POST['password'] ?? '';
-    $validRoles = ['Admin', 'User'];
-    $passwordErrors = [];
-
-    if (strlen($password) < 8) $passwordErrors[] = "at least 8 characters";
-    if (!preg_match('/[A-Z]/', $password)) $passwordErrors[] = "one uppercase letter";
-    if (!preg_match('/[a-z]/', $password)) $passwordErrors[] = "one lowercase letter";
-    if (!preg_match('/[0-9]/', $password)) $passwordErrors[] = "one number";
-    if (!preg_match('/[^a-zA-Z0-9]/', $password)) $passwordErrors[] = "one special character";
-
-    if ($fullname === '' || $email === '' || $role === '' || $password === '') {
-        $message = "Please fill in all user fields.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $message = "Please enter a valid email address.";
-    } elseif (!in_array($role, $validRoles, true)) {
-        $message = "Please select a valid role.";
-    } elseif (!empty($passwordErrors)) {
-        $message = "Password must include: " . implode(", ", $passwordErrors) . ".";
-    } else {
-        try {
-            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("INSERT INTO users (fullname, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())");
-            $stmt->bind_param("ssss", $fullname, $email, $passwordHash, $role);
-            $stmt->execute();
-            $stmt->close();
-
-            header("Location: admin.php?success=User added successfully");
-            exit();
-        } catch (mysqli_sql_exception $e) {
-            $message = "Could not add user. The email may already be registered.";
+        if ($userId > 0 && $fullname !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            try {
+                $stmt = $conn->prepare("UPDATE users SET fullname = ?, email = ?, role = ? WHERE id = ?");
+                $stmt->bind_param("sssi", $fullname, $email, $role, $userId);
+                $stmt->execute();
+                header("Location: admin.php?success=User updated successfully");
+                exit();
+            } catch (mysqli_sql_exception $e) { $message = "Could not update user."; }
         }
     }
-}
-
-// Update an existing user's name, email, or role.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'update_user') {
-    $userId = (int)($_POST['user_id'] ?? 0);
-    $fullname = trim($_POST['fullname'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $role = trim($_POST['role'] ?? '');
-    $validRoles = ['Admin', 'User'];
-
-    if ($userId <= 0) {
-        $message = "Invalid user selected.";
-    } elseif ($fullname === '' || $email === '' || $role === '') {
-        $message = "Please fill in all user fields.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $message = "Please enter a valid email address.";
-    } elseif (!in_array($role, $validRoles, true)) {
-        $message = "Please select a valid role.";
-    } else {
-        try {
-            $stmt = $conn->prepare("UPDATE users SET fullname = ?, email = ?, role = ? WHERE id = ?");
-            $stmt->bind_param("sssi", $fullname, $email, $role, $userId);
-            $stmt->execute();
-            $stmt->close();
-
-            header("Location: admin.php?success=User updated successfully");
-            exit();
-        } catch (mysqli_sql_exception $e) {
-            $message = "Could not update user. The email may already be registered.";
-        }
-    }
-}
-
-// Delete a user account.
-// The current admin cannot delete their own account while logged in.
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'delete_user') {
-    $userId = (int)($_POST['user_id'] ?? 0);
-    $currentUserId = (int)($_SESSION['user_id'] ?? 0);
-
-    if ($userId <= 0) {
-        $message = "Invalid user selected.";
-    } elseif ($userId === $currentUserId) {
-        $message = "You cannot delete your own account while logged in.";
-    } else {
-        try {
+    elseif ($action === 'delete_user') {
+        $userId = (int)($_POST['user_id'] ?? 0);
+        if ($userId > 0 && $userId !== (int)$_SESSION['user_id']) {
             $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
             $stmt->bind_param("i", $userId);
             $stmt->execute();
-            $stmt->close();
-
             header("Location: admin.php?success=User deleted successfully");
             exit();
-        } catch (mysqli_sql_exception $e) {
-            $message = "Could not delete user.";
+        } else {
+            $message = "You cannot delete your own account.";
         }
+    }
+
+    // --- MARK MESSAGE AS READ ---
+    elseif ($action === 'mark_message_read') {
+        $msgId = (int)($_POST['message_id'] ?? 0);
+        if ($msgId > 0) {
+            $stmt = $conn->prepare("UPDATE admin_messages SET status = 'Read' WHERE id = ?");
+            $stmt->bind_param("i", $msgId);
+            $stmt->execute();
+            header("Location: admin.php?success=Message marked as read");
+            exit();
+        }
+    }
+    elseif ($action === 'reply_message') {
+        $msgId = (int)($_POST['message_id'] ?? 0);
+        $replyText = trim($_POST['reply_text'] ?? '');
+
+        if ($msgId > 0 && $replyText !== '') {
+            $stmt = $conn->prepare("UPDATE admin_messages SET status = 'Read' WHERE id = ?");
+            $stmt->bind_param("i", $msgId);
+            $stmt->execute();
+            header("Location: admin.php?success=Reply sent and request marked as handled");
+            exit();
+        }
+
+        $message = "Please type a reply before sending.";
     }
 }
 
-// Show a success message after redirects like add, edit, approve, or delete.
 if (isset($_GET['success'])) {
     $message = $_GET['success'];
     $messageType = 'success';
+} elseif (isset($_GET['error'])) {
+    $message = $_GET['error'];
 }
 
-// Load messages sent by users from the user dashboard.
-$adminMessages = [];
-try {
-    $sqlMessages = "SELECT id, sender_name, sender_email, subject, content, status, created_at
-                    FROM admin_messages
-                    ORDER BY created_at DESC
-                    LIMIT 25";
-    $resultMessages = $conn->query($sqlMessages);
-    if ($resultMessages && $resultMessages->num_rows > 0) {
-        while ($row = $resultMessages->fetch_assoc()) {
-            $dateObj = new DateTime($row['created_at']);
-            $row['formatted_date'] = $dateObj->format('d M Y, g:ia');
-            $adminMessages[] = $row;
-        }
-    }
-} catch (mysqli_sql_exception $e) {
-    $adminMessages = [];
-}
+// --- 2. FETCH ALL DATA ---
 
-// Load pending room requests so the admin can approve or reject them.
-$meetingRequests = [];
-try {
-    $sqlRequests = "SELECT mr.*, u.fullname AS requester_name
-                    FROM meeting_requests mr
-                    INNER JOIN users u ON u.id = mr.requester_id
-                    WHERE mr.status = 'Pending'
-                    ORDER BY mr.created_at ASC";
-    $resultRequests = $conn->query($sqlRequests);
-    if ($resultRequests && $resultRequests->num_rows > 0) {
-        while($row = $resultRequests->fetch_assoc()) {
-            $dateObj = new DateTime($row['date']);
-            $startObj = new DateTime($row['start_time']);
-            $endObj = new DateTime($row['end_time']);
+// Events
+$events = [];
+$resEvents = $conn->query("SELECT e.*, u.fullname AS assigned_staff_name FROM events e LEFT JOIN users u ON e.assigned_staff_id = u.id ORDER BY e.date ASC");
+if ($resEvents) { while ($row = $resEvents->fetch_assoc()) $events[] = $row; }
 
-            $row['formatted_date'] = $dateObj->format('d M Y');
-            $row['formatted_time'] = $startObj->format('g:ia') . ' - ' . $endObj->format('g:ia');
-            $meetingRequests[] = $row;
-        }
-    }
-} catch (mysqli_sql_exception $e) {
-    $meetingRequests = [];
-}
-
-// Load upcoming room reservations for the "Reserved Room" list.
-$reservedRooms = [];
-try {
-    $sqlRooms = "SELECT room, date, start_time, end_time FROM meetings WHERE status = 'Upcoming' ORDER BY date ASC, start_time ASC";
-    $resultRooms = $conn->query($sqlRooms);
-    if ($resultRooms && $resultRooms->num_rows > 0) {
-        while($row = $resultRooms->fetch_assoc()) {
-            $dateObj = new DateTime($row['date']);
-            $startObj = new DateTime($row['start_time']);
-            $endObj = new DateTime($row['end_time']);
-            
-            $row['formatted_time'] = $dateObj->format('d M') . ' | ' . $startObj->format('g:ia') . '-' . $endObj->format('g:ia');
-            $reservedRooms[] = $row;
-        }
-    }
-} catch (mysqli_sql_exception $e) {
-    $reservedRooms = [];
-}
-
-// Load all meetings shown as cards on the left side.
-$meetings = [];
-try {
-    $sqlMeetings = "SELECT * FROM meetings ORDER BY date ASC, start_time ASC";
-    $resultMeetings = $conn->query($sqlMeetings);
-    if ($resultMeetings && $resultMeetings->num_rows > 0) {
-        while($row = $resultMeetings->fetch_assoc()) {
-            // Format date and time to match the original design
-            $dateObj = new DateTime($row['date']);
-            $startObj = new DateTime($row['start_time']);
-            $endObj = new DateTime($row['end_time']);
-
-            $row['raw_date'] = $row['date'];
-            $row['raw_start_time'] = substr($row['start_time'], 0, 5);
-            $row['raw_end_time'] = substr($row['end_time'], 0, 5);
-            $row['date'] = $dateObj->format('d M Y');
-            $row['duration'] = $startObj->format('g:ia') . ' - ' . $endObj->format('g:ia');
-
-            $meetings[] = $row;
-        }
-    }
-} catch (mysqli_sql_exception $e) {
-    $meetings = [];
-}
-
-// Load all users shown in the user list on the right side.
+// Users & Staff
 $users = [];
-try {
-    $sqlUsers = "SELECT id, fullname, email, role FROM users ORDER BY fullname ASC";
-    $resultUsers = $conn->query($sqlUsers);
-    if ($resultUsers && $resultUsers->num_rows > 0) {
-        while($row = $resultUsers->fetch_assoc()) {
-            $users[] = $row;
-        }
+$staffList = [];
+$resUsers = $conn->query("SELECT id, fullname, email, role FROM users ORDER BY fullname ASC");
+if ($resUsers) {
+    while ($row = $resUsers->fetch_assoc()) {
+        $users[] = $row;
+        if ($row['role'] === 'Staff') $staffList[] = $row;
     }
-} catch (mysqli_sql_exception $e) {
-    $users = [];
+}
+
+// Forwarded Admin Messages
+$forwardedMessages = [];
+$resMessages = $conn->query("SELECT * FROM admin_messages WHERE subject LIKE '[FORWARDED by %' AND status = 'Unread' ORDER BY created_at DESC");
+if ($resMessages) {
+    while ($row = $resMessages->fetch_assoc()) {
+        $row['formatted_date'] = (new DateTime($row['created_at']))->format('d M Y, g:ia');
+        
+        // Extract the Staff Name and Clean Subject using regex
+        $row['forwarded_by'] = "Staff";
+        $row['clean_subject'] = $row['subject'];
+        if (preg_match('/\[FORWARDED by (.*?)\] (.*)/', $row['subject'], $matches)) {
+            $row['forwarded_by'] = $matches[1];
+            $row['clean_subject'] = $matches[2];
+        }
+        
+        $forwardedMessages[] = $row;
+    }
 }
 
 $conn->close();
@@ -452,966 +196,444 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#11072b">
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="captcha.png">
     <title>Admin Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        /* Base Reset */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: #ffffff; color: #333; overflow-x: hidden; }
+        body { background-color: #f8f9fa; color: #333; overflow-x: hidden; }
 
-        /* --- Header & Wave Design --- */
-        .header-container {
-            position: relative;
-            width: 100%;
-            height: 120px;
-            background-color: #11072b;
-            color: white;
-            padding: 40px 60px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
+        /* Header */
+        .header-container { position: relative; width: 100%; height: 120px; background-color: #11072b; color: white; padding: 40px 60px; display: flex; justify-content: space-between; align-items: flex-start; }
+        .header-wave { position: absolute; top: 100%; left: 0; width: 100%; height: 100px; z-index: 1; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 100' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L1000,0 L1000,30 C750,10 250,120 0,80 Z' fill='%2311072b'/%3E%3C/svg%3E"); background-size: 100% 100%; }
+        .header-container h1 { font-size: 2.5rem; font-weight: 400; z-index: 2; }
+        .logout-btn { background-color: white; color: #11072b; padding: 10px 30px; border-radius: 25px; text-decoration: none; font-weight: bold; font-size: 1rem; z-index: 2; }
 
-        .header-wave {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            width: 100%;
-            height: 100px;
-            z-index: 1;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 100' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L1000,0 L1000,30 C750,10 250,120 0,80 Z' fill='%2311072b'/%3E%3C/svg%3E");
-            background-size: 100% 100%;
-        }
+        /* Container & Nav Tabs */
+        .main-container { padding: 40px 60px; margin-top: 90px; position: relative; z-index: 2; max-width: 1400px; margin-left: auto; margin-right: auto; }
+        .admin-nav { display: flex; gap: 15px; margin-bottom: 30px; border-bottom: 2px solid #ddd; padding-bottom: 15px; }
+        .nav-btn { background: transparent; border: none; font-size: 1.1rem; font-weight: bold; color: #666; cursor: pointer; padding: 10px 24px; border-radius: 25px; transition: 0.3s; display: inline-flex; align-items: center; gap: 8px; }
+        .nav-btn:hover { color: #11072b; background: #eee; }
+        .nav-btn.active { background: #11072b; color: white; }
 
-        .header-container h1 {
-            font-size: 2.5rem;
-            font-weight: 400;
-            z-index: 2;
-        }
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        .logout-btn {
-            background-color: white;
-            color: #11072b;
-            padding: 10px 30px;
-            border-radius: 25px;
-            text-decoration: none;
-            font-weight: bold;
-            font-size: 1rem;
-            z-index: 2;
-        }
+        /* Alerts */
+        .alert-box { padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; text-align: center; }
+        .alert-success { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+        .alert-error { background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
 
-        /* --- Main Layout --- */
-        .main-content {
-            display: flex;
-            padding: 60px;
-            gap: 50px;
-            margin-top: 90px;
-        }
+        /* Action Bar */
+        .action-bar { display: flex; justify-content: flex-end; gap: 15px; margin-bottom: 20px; }
+        .action-bar button, .action-bar a { background-color: #11072b; color: white; border: none; padding: 10px 24px; border-radius: 25px; text-decoration: none; font-weight: bold; cursor: pointer; }
 
-        /* --- Left Column: Meetings --- */
-        .meetings-section {
-            flex: 2;
-        }
+        /* --- Events Tab --- */
+        .events-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 30px; }
+        .event-card { background-color: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); overflow: hidden; display: flex; flex-direction: column; border: 1px solid #eee; }
+        .event-card-image-wrapper { position: relative; width: 100%; padding-top: 70%; }
+        .event-card-image-wrapper img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        .event-card-body { padding: 20px; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        .event-card-body h3 { font-size: 1.25rem; color: #11062b; }
+        .event-card-body p { font-size: 0.85rem; color: #555; }
+        .event-staff { font-size: 0.85rem; font-weight: bold; color: #198754; background: #d1e7dd; padding: 4px 10px; border-radius: 12px; display: inline-block; width: fit-content; }
+        .event-staff.unassigned { color: #842029; background: #f8d7da; }
+        
+        .event-actions { display: flex; border-top: 1px solid #eee; background: #fdfdfd; }
+        .event-action-btn { flex: 1; padding: 15px; border: none; background: transparent; cursor: pointer; font-size: 0.95rem; font-weight: bold; color: #11062b; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .event-action-btn:hover { background: #eee; }
+        .event-action-btn:first-child { border-right: 1px solid #eee; }
 
-        .meetings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-        }
+        .card-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
+        .icon-btn { width: 35px; height: 35px; border-radius: 5px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: white; }
+        .btn-check { background-color: #198754; }
+        .btn-trash { background-color: #b02a37; }
 
-        /* Individual Meeting Card */
-        .meeting-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
-            border-top: 5px solid #11072b;
-        }
+        /* --- Users Tab --- */
+        .admin-split-layout { display: flex; gap: 40px; }
+        .admin-column { flex: 1; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 6px 15px rgba(0,0,0,0.3); }
+        .admin-column h2 { font-size: 1.5rem; color: #11072b; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        
+        .list-item { border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .list-item-info h3 { font-size: 1.1rem; margin-bottom: 5px; }
+        .list-item-info p { font-size: 0.85rem; color: #666; }
+        .list-actions { display: flex; gap: 10px; }
+        .btn-edit { background: #f6d365; color: #000; width: 35px; height: 35px; border-radius: 5px; border:none; cursor: pointer;}
+        
+        /* Modals */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 10px; width: 100%; max-width: 400px; position: relative; }
+        .modal-content.wide { max-width: 500px; }
+        .close-modal { position: absolute; top: 15px; right: 15px; cursor: pointer; font-size: 1.5rem; }
+        .modal-content form { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
+        .modal-content input, .modal-content select, .modal-content textarea { padding: 12px; border: 1px solid #ccc; border-radius: 5px; }
+        .modal-content button[type="submit"] { background-color: #11072b; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .modal-content button[type="submit"]:hover { background-color: #2b1154; }
 
-        .meeting-info h4 {
-            font-size: 0.75rem;
-            color: #666;
-            margin-bottom: 5px;
-            font-weight: normal;
-        }
-
-        .meeting-info h3 {
-            font-size: 1.1rem;
-            color: #000;
-            margin-bottom: 10px;
-        }
-
-        .meeting-info p {
-            font-size: 0.8rem;
-            margin-bottom: 3px;
-        }
-
-        .meeting-info p strong {
-            font-weight: bold;
-            color: #000;
-        }
-
-
-        /* Card Action Buttons */
-        .card-actions {
-            display: flex;
-            flex-direction: row;
-            justify-content: flex-end;
-            gap: 15px;
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #eee;
-        }
-
-        .card-actions form {
-            margin: 0;
-        }
-
-        .icon-btn {
-            width: 35px;
-            height: 35px;
-            border-radius: 50%;
-            border: none;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-        }
-
-        .btn-check { background-color: #5cf25c; color: #000; }
-        .btn-edit-meeting { background-color: #f6d365; color: #000; }
-        .btn-trash { background-color: #9d8bb8; color: #000; }
-
-        .pagination {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 1.5rem;
-            color: #333;
-            letter-spacing: 20px;
-            cursor: pointer;
-        }
-
-        .action-buttons {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
-            margin-bottom: 24px;
-        }
-
-        .action-buttons button,
-        .action-buttons a {
-            background-color: #11072b;
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            font-size: 1rem;
-            cursor: pointer;
-            text-decoration: none;
-        }
-
-        /* --- Right Column: Users --- */
-        .divider {
-            width: 1px;
-            background-color: #ccc;
-        }
-
-        .users-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .users-section h2 {
-            font-size: 1.8rem;
-            color: #11072b;
-            padding: 30px 0 20px 0;
-        }
-
-        .users-list {
-            width: 100%;
-            max-width: 300px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .user-card {
-            background-color: #11072b;
-            color: white;
-            padding: 15px 20px;
-            border-radius: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        .user-info p { font-size: 0.7rem; color: #ccc; margin-bottom: 3px; }
-        .user-info h3 { font-size: 1.2rem; font-weight: normal; }
-
-        .request-card {
-            background: white;
-            color: #333;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.18);
-            border-top: 5px solid #11072b;
-        }
-
-        .request-card h3 {
-            color: #11072b;
-            font-size: 1rem;
-            margin-bottom: 8px;
-        }
-
-        .request-card p {
-            font-size: 0.78rem;
-            line-height: 1.4;
-            margin-bottom: 4px;
-        }
-
-        .request-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 12px;
-        }
-
-        .request-actions form {
-            flex: 1;
-        }
-
-        .request-actions button {
-            width: 100%;
-            border: none;
-            padding: 9px 10px;
-            border-radius: 6px;
-            color: white;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        .btn-approve-request { background: #198754; }
-        .btn-reject-request { background: #b02a37; }
-
-        .btn-edit {
-            background: white;
-            color: #11072b;
-            width: 30px;
-            height: 30px;
-            border-radius: 5px;
-            border: none;
-            cursor: pointer;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .user-actions {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-
-        .btn-delete-user {
+        .message-badge {
             background: #b02a37;
             color: white;
-            width: 30px;
-            height: 30px;
-            border-radius: 5px;
-            border: none;
-            cursor: pointer;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .btn-add-user {
-            background: transparent;
-            color: #11072b;
-            border: 2px solid #11072b;
-            padding: 8px 30px;
-            border-radius: 25px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            font-weight: bold;
-            margin-top: 18px;
-        }
-
-        /* --- Footer --- */
-        .footer { padding: 0 60px 40px 60px; }
-        .footer a { color: #11072b; font-size: 1.1rem; }
-
-        /* --- Modal Styles --- */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            width: 100%;
-            max-width: 400px;
-            position: relative;
-        }
-
-        .close-modal { position: absolute; top: 15px; right: 15px; cursor: pointer; font-size: 1.5rem; color: #333; }
-        .close-modal:hover { color: #d9534f; }
-
-        .modal-content h2 { margin-bottom: 20px; color: #11072b; }
-        .modal-content form { display: flex; flex-direction: column; gap: 15px; }
-        .modal-content input, .modal-content select { padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 1rem; }
-        .modal-content button { background-color: #11072b; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-size: 1rem; transition: 0.3s; }
-        .modal-content button:hover { background-color: #2b1154; }
-        
-        .message-modal-content { text-align: center; max-width: 360px; }
-        .message-icon {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 16px;
-            font-size: 1.5rem;
-        }
-        .message-icon.success { background: #d1e7dd; color: #0f5132; }
-        .message-icon.error { background: #f8d7da; color: #842029; }
-        .message-modal-content p { color: #444; line-height: 1.5; margin-bottom: 22px; }
-        
-        /* --- Floating Icon for Messages --- */
-        .message-request-icon {
-            position: fixed;
-            bottom: 1rem;
-            left: 1rem;
-            z-index: 1000;
-            cursor: pointer;
-            transition: transform 0.2s;
-            border-radius: 50%;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            /* Adds a slight dark background so the icon stands out clearly */
-            background: #11072b; 
-            padding: 10px;
-        }
-        .message-request-icon:hover {
-            transform: scale(1.05);
-        }
-
-        /* --- Message Request Modal styling --- */
-        .message-request-content {
-            background: #11062b; /* Match screenshot dark purple */
-            color: white;
-            padding: 40px;
-            border-radius: 15px;
-            width: 100%;
-            max-width: 450px;
-            position: relative;
-        }
-        .message-request-content h2 {
-            margin-bottom: 5px;
-            color: white;
-            text-transform: uppercase;
-            font-size: 1.3rem;
-            letter-spacing: 0.5px;
-        }
-        .message-request-divider {
-            height: 4px;
-            background: white;
-            width: 100%;
-            margin-bottom: 25px;
-            border-radius: 2px;
-        }
-        .message-request-content .close-modal {
-            color: white;
-        }
-        .message-request-content .close-modal:hover {
-            color: #ccc;
-        }
-
-        .message-list {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .message-list::-webkit-scrollbar {
-            width: 6px;
-        }
-        .message-list::-webkit-scrollbar-thumb {
-            background: #ccc;
-            border-radius: 10px;
-        }
-
-        .message-item {
-            background: #d9d9d9;
-            border-radius: 20px;
-            padding: 15px 20px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            color: #11072b;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .message-item:hover {
-            background: #c0c0c0;
-        }
-        .message-item-icon {
-            width: 35px;
-            height: 35px;
-            flex-shrink: 0;
-            filter: invert(10%) sepia(45%) saturate(3027%) hue-rotate(249deg) brightness(88%) contrast(105%); /* Adjust icon to match dark text color */
-        }
-        .message-item-text {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-        .message-item-name {
-            font-weight: bold;
-            font-size: 0.95rem;
-        }
-        .message-item-title {
-            font-size: 0.85rem;
-            color: #444;
-            overflow-wrap: anywhere;
-        }
-        .message-item-meta {
             font-size: 0.75rem;
-            color: #666;
+            font-weight: bold;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
+        .message-list { display: flex; flex-direction: column; gap: 15px; }
+        
+        .message-item { background: white; border-radius: 10px; padding: 15px; color: #333; position: relative; }
+        .message-item-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        .message-item-forwarder { font-size: 0.75rem; color: #198754; background: #d1e7dd; padding: 3px 8px; border-radius: 8px; font-weight: bold; }
+        .message-item-date { font-size: 0.75rem; color: #888; }
+        .message-item-name { font-weight: bold; font-size: 1rem; color: #11062b; margin-bottom: 2px; display: block; }
+        .message-item-email { font-size: 0.8rem; color: #666; margin-bottom: 8px; display: block; }
+        .message-item-subject { font-size: 0.9rem; font-weight: bold; color: #333; margin-bottom: 5px; }
+        .message-item-content { font-size: 0.85rem; color: #555; background: #f9f9fb; padding: 10px; border-radius: 5px; font-style: italic; border-left: 3px solid #11062b; }
+        
+        .message-action-bar { display: flex; justify-content: flex-end; margin-top: 10px; }
+        .btn-mark-read { background: #11062b; color: white; border: none; padding: 8px 15px; border-radius: 5px; font-size: 0.8rem; cursor: pointer; transition: 0.2s; }
+        .btn-mark-read:hover { background: #2b1154; }
+        .btn-reply { background: #f6d365; color: #000; border: none; padding: 8px 15px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; cursor: pointer; }
 
     </style>
 </head>
 <body>
 
     <header class="header-container">
-        <h1>Hello, {<?php echo $adminName; ?>}</h1>
+        <h1>Hello, {<?php echo htmlspecialchars($adminName); ?>}</h1>
         <a href="login.php" class="logout-btn">Logout</a>
         <div class="header-wave"></div>
     </header>
 
-    <main class="main-content">
+    <div class="main-container">
         
-        <section class="meetings-section">
-            <div class="action-buttons">
-                <a href="admin.php?action=export_meetings">Export as .csv</a>
-                <button id="addMeetingBtn">+ Add Meeting</button>
+        <?php if(!empty($message)): ?>
+            <div class="alert-box <?php echo $messageType === 'success' ? 'alert-success' : 'alert-error'; ?>">
+                <?php echo htmlspecialchars($message); ?>
             </div>
+        <?php endif; ?>
 
-            <div class="meetings-box">
-                <div class="meetings-grid">
-                    
-                    <?php foreach ($meetings as $meeting): ?>
-                        <div class="meeting-card">
-                            <div class="meeting-info">
-                                <h4><?php echo htmlspecialchars($meeting['status']); ?></h4>
-                                <h3><?php echo htmlspecialchars($meeting['title']); ?></h3>
-                                <p><strong>PIC:</strong> <?php echo htmlspecialchars($meeting['pic']); ?></p>
-                                <p><strong>Expected Attendees:</strong> <?php echo htmlspecialchars($meeting['attendees']); ?></p>
-                                <p><strong>Room:</strong> <?php echo htmlspecialchars($meeting['room']); ?></p>
-                                <p><strong>Date:</strong> <?php echo htmlspecialchars($meeting['date']); ?></p>
-                                <p><strong>Duration:</strong> <?php echo htmlspecialchars($meeting['duration']); ?></p>
-                            </div>
-                            <div class="card-actions">
-                                <form action="admin.php" method="POST">
-                                    <input type="hidden" name="action" value="end_meeting">
-                                    <input type="hidden" name="meeting_id" value="<?php echo (int)$meeting['id']; ?>">
-                                    <button type="submit" class="icon-btn btn-check" title="Mark meeting as ended" aria-label="Mark meeting as ended">
-                                        <i class="fa-solid fa-check"></i>
-                                    </button>
-                                </form>
-                                <button
-                                    type="button"
-                                    class="icon-btn btn-edit-meeting edit-meeting-btn"
-                                    title="Edit meeting"
-                                    aria-label="Edit meeting"
-                                    data-meeting-id="<?php echo (int)$meeting['id']; ?>"
-                                    data-meeting-status="<?php echo htmlspecialchars($meeting['status'], ENT_QUOTES); ?>"
-                                    data-meeting-title="<?php echo htmlspecialchars($meeting['title'], ENT_QUOTES); ?>"
-                                    data-meeting-pic="<?php echo htmlspecialchars($meeting['pic'], ENT_QUOTES); ?>"
-                                    data-meeting-attendees="<?php echo (int)$meeting['attendees']; ?>"
-                                    data-meeting-room="<?php echo htmlspecialchars($meeting['room'], ENT_QUOTES); ?>"
-                                    data-meeting-date="<?php echo htmlspecialchars($meeting['raw_date'], ENT_QUOTES); ?>"
-                                    data-meeting-start-time="<?php echo htmlspecialchars($meeting['raw_start_time'], ENT_QUOTES); ?>"
-                                    data-meeting-end-time="<?php echo htmlspecialchars($meeting['raw_end_time'], ENT_QUOTES); ?>"
-                                >
-                                    <i class="fa-regular fa-pen-to-square"></i>
-                                </button>
-                                <button
-                                    type="button"
-                                    class="icon-btn btn-trash delete-meeting-btn"
-                                    title="Delete meeting"
-                                    aria-label="Delete meeting"
-                                    data-meeting-id="<?php echo (int)$meeting['id']; ?>"
-                                    data-meeting-title="<?php echo htmlspecialchars($meeting['title'], ENT_QUOTES); ?>"
-                                >
-                                    <i class="fa-solid fa-trash-can"></i>
-                                </button>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
+        <div class="admin-nav">
+            <button class="nav-btn active" onclick="switchTab('tabEvents', this)">Events</button>
+            <button class="nav-btn" onclick="switchTab('tabUsers', this)">Users</button>
+            <button class="nav-btn" onclick="switchTab('tabRequests', this)">
+                Requests
+                <?php if (count($forwardedMessages) > 0): ?>
+                    <span class="message-badge"><?php echo count($forwardedMessages); ?></span>
+                <?php endif; ?>
+            </button>
+        </div>
 
-                </div>
-                <div class="pagination">
-                    <span>&lt;</span> <span>&gt;</span>
-                </div>
+        <div id="tabEvents" class="tab-content active">
+            <div class="action-bar">
+                <button onclick="document.getElementById('addEventModal').style.display='flex'">+ Create Event</button>
             </div>
-
-        </section>
-
-        <div class="divider"></div>
-
-        <section class="users-section">
-            <h2>Meeting Requests</h2>
-            <div class="users-list">
-                <?php if (empty($meetingRequests)): ?>
-                    <p style="color: #666; font-style: italic; text-align: center;">No pending requests.</p>
+            <div class="events-grid">
+                <?php if (empty($events)): ?>
+                    <p style="color: #666; font-style: italic;">No events found in the database.</p>
                 <?php else: ?>
-                    <?php foreach ($meetingRequests as $request): ?>
-                        <div class="request-card">
-                            <h3><?php echo htmlspecialchars($request['title']); ?></h3>
-                            <p><strong>Requested by:</strong> <?php echo htmlspecialchars($request['requester_name']); ?></p>
-                            <p><strong>PIC:</strong> <?php echo htmlspecialchars($request['pic']); ?></p>
-                            <p><strong>Attendees:</strong> <?php echo htmlspecialchars($request['attendees']); ?></p>
-                            <p><strong>Room:</strong> <?php echo htmlspecialchars($request['room']); ?></p>
-                            <p><strong>Date:</strong> <?php echo htmlspecialchars($request['formatted_date']); ?></p>
-                            <p><strong>Time:</strong> <?php echo htmlspecialchars($request['formatted_time']); ?></p>
-                            <div class="request-actions">
-                                <form action="admin.php" method="POST">
-                                    <input type="hidden" name="action" value="approve_request">
-                                    <input type="hidden" name="request_id" value="<?php echo (int)$request['id']; ?>">
-                                    <button type="submit" class="btn-approve-request">Approve</button>
-                                </form>
-                                <form action="admin.php" method="POST">
-                                    <input type="hidden" name="action" value="reject_request">
-                                    <input type="hidden" name="request_id" value="<?php echo (int)$request['id']; ?>">
-                                    <button type="submit" class="btn-reject-request">Reject</button>
-                                </form>
+                    <?php foreach ($events as $evt): 
+                        $isAssigned = !empty($evt['assigned_staff_id']);
+                        $staffName = $isAssigned ? $evt['assigned_staff_name'] : "Unassigned";
+                        $badgeClass = $isAssigned ? "event-staff" : "event-staff unassigned";
+                    ?>
+                        <div class="event-card">
+                            <div class="event-card-image-wrapper">
+                                <img src="<?php echo htmlspecialchars($evt['image_path']); ?>" alt="Poster">
+                            </div>
+                            <div class="event-card-body">
+                                <h3><?php echo htmlspecialchars($evt['title']); ?></h3>
+                                <p><i class="fa-regular fa-calendar"></i> <?php echo (new DateTime($evt['date']))->format('M d, Y'); ?> | <?php echo (new DateTime($evt['start_time']))->format('h:i A'); ?></p>
+                                <p><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($evt['room']); ?></p>
+                                <span class="<?php echo $badgeClass; ?>"><i class="fa-solid fa-user-tie"></i> <?php echo htmlspecialchars($staffName); ?></span>
+                            </div>
+                            <div class="event-actions">
+                                <button class="event-action-btn edit-event-btn" 
+                                    data-id="<?php echo $evt['id']; ?>"
+                                    data-title="<?php echo htmlspecialchars($evt['title'], ENT_QUOTES); ?>"
+                                    data-desc="<?php echo htmlspecialchars($evt['description'], ENT_QUOTES); ?>"
+                                    data-room="<?php echo htmlspecialchars($evt['room'], ENT_QUOTES); ?>"
+                                    data-date="<?php echo $evt['date']; ?>"
+                                    data-start="<?php echo $evt['start_time']; ?>"
+                                    data-end="<?php echo $evt['end_time']; ?>">
+                                    <i class="fa-regular fa-pen-to-square"></i> Edit
+                                </button>
+                                <button class="event-action-btn assign-staff-btn" 
+                                    data-id="<?php echo $evt['id']; ?>" 
+                                    data-title="<?php echo htmlspecialchars($evt['title'], ENT_QUOTES); ?>"
+                                    data-staff="<?php echo $evt['assigned_staff_id']; ?>">
+                                    <i class="fa-solid fa-user-plus"></i> Assign
+                                </button>
                             </div>
                         </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
+        </div>
 
-            <h2>Reserved Rooms</h2>
-            <div class="users-list">
-                <?php if (empty($reservedRooms)): ?>
-                    <p style="color: #666; font-style: italic; text-align: center;">No rooms reserved.</p>
-                <?php else: ?>
-                    <?php foreach ($reservedRooms as $room): ?>
-                        <div class="user-card">
-                            <div class="user-info">
-                                <p><?php echo htmlspecialchars($room['formatted_time']); ?></p>
-                                <h3><?php echo htmlspecialchars($room['room']); ?></h3>
+        <div id="tabUsers" class="tab-content">
+            <div class="admin-split-layout">
+                <div class="admin-column">
+                    <h2>Staff & Users</h2>
+                    <div class="action-bar" style="justify-content: flex-start; margin-top:-10px;">
+                        <button onclick="document.getElementById('addUserModal').style.display='flex'">+ Add User</button>
+                    </div>
+                    <?php foreach ($users as $u): ?>
+                        <div class="list-item">
+                            <div class="list-item-info">
+                                <h3><?php echo htmlspecialchars($u['fullname']); ?></h3>
+                                <p><?php echo htmlspecialchars($u['role']); ?> | <?php echo htmlspecialchars($u['email']); ?></p>
                             </div>
-                        </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-
-            <h2>Users List</h2>
-            <div class="users-list">
-                <?php if (empty($users)): ?>
-                    <p style="color: #666; font-style: italic; text-align: center;">No users found.</p>
-                <?php else: ?>
-                    <?php foreach ($users as $user): ?>
-                        <div class="user-card">
-                            <div class="user-info">
-                                <p><?php echo htmlspecialchars($user['role']); ?></p>
-                                <h3><?php echo htmlspecialchars($user['fullname']); ?></h3>
-                            </div>
-                            <div class="user-actions">
-                                <button
-                                    type="button"
-                                    class="btn-edit"
-                                    onclick="openEditModal('<?php echo (int)$user['id']; ?>', '<?php echo htmlspecialchars($user['fullname'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($user['email'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($user['role'], ENT_QUOTES); ?>')"
-                                    title="Edit user"
-                                    aria-label="Edit user"
-                                >
-                                    <i class="fa-regular fa-pen-to-square"></i>
+                            <div class="list-actions">
+                                <button class="btn-edit" 
+                                    onclick="openEditUserModal('<?php echo $u['id']; ?>', '<?php echo htmlspecialchars($u['fullname'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($u['email'], ENT_QUOTES); ?>', '<?php echo $u['role']; ?>')">
+                                    <i class="fa-solid fa-pen"></i>
                                 </button>
-                                <form action="admin.php" method="POST" onsubmit="return confirm('Delete this user?');">
+                                <form action="admin.php" method="POST" style="margin:0;" onsubmit="return confirm('Delete user?');">
                                     <input type="hidden" name="action" value="delete_user">
-                                    <input type="hidden" name="user_id" value="<?php echo (int)$user['id']; ?>">
-                                    <button type="submit" class="btn-delete-user" title="Delete user" aria-label="Delete user">
-                                        <i class="fa-solid fa-trash-can"></i>
-                                    </button>
+                                    <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                    <button type="submit" class="icon-btn btn-trash"><i class="fa-solid fa-trash"></i></button>
                                 </form>
                             </div>
                         </div>
                     <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-
-            <button id="addUserBtn" class="btn-add-user">+ Add User</button>
-                        
-        </section>
-
-        <input class="message-request-icon" id="messageRequestBtn" type="image" src="smsicon.svg" width="60" height="60" alt="View Messages">
-
-    </main>
-
-    <footer class="footer">
-    </footer>
-
-    <?php if (!empty($message)): ?>
-        <div id="messageModal" class="modal-overlay" style="display: flex;">
-            <div class="modal-content message-modal-content">
-                <span class="close-modal" id="closeMessageModal">&times;</span>
-                <div class="message-icon <?php echo htmlspecialchars($messageType); ?>">
-                    <i class="fa-solid <?php echo $messageType === 'success' ? 'fa-check' : 'fa-triangle-exclamation'; ?>"></i>
                 </div>
-                <h2><?php echo $messageType === 'success' ? 'Success' : 'Notice'; ?></h2>
-                <p><?php echo htmlspecialchars($message); ?></p>
-                <button type="button" id="messageModalOkBtn">OK</button>
             </div>
         </div>
-    <?php endif; ?>
 
-    <div id="deleteMeetingModal" class="modal-overlay">
-        <div class="modal-content" style="text-align: center;">
-            <span class="close-modal" id="closeDeleteMeetingModal">&times;</span>
-            <div class="message-icon error">
-                <i class="fa-solid fa-trash-can"></i>
-            </div>
-            <h2>Delete Meeting</h2>
-            <p style="color: #444; line-height: 1.5; margin-bottom: 20px;">
-                Are you sure you want to delete <strong id="deleteMeetingTitle">this meeting</strong>? This action cannot be undone.
-            </p>
-            <form action="admin.php" method="POST" id="deleteMeetingForm">
-                <input type="hidden" name="action" value="delete_meeting">
-                <input type="hidden" name="meeting_id" id="deleteMeetingId">
-                <div style="display: flex; gap: 12px; justify-content: center;">
-                    <button type="button" id="cancelDeleteMeetingBtn" style="background: #e9ecef; color: #11072b;">Cancel</button>
-                    <button type="submit" style="background: #b02a37;">Delete</button>
+        <div id="tabRequests" class="tab-content">
+            <div class="admin-column">
+                <h2>Message Requests</h2>
+                <div class="message-list">
+                    <?php if (empty($forwardedMessages)): ?>
+                        <p style="color: #666; font-style: italic;">No forwarded messages to review.</p>
+                    <?php else: ?>
+                        <?php foreach ($forwardedMessages as $msg): ?>
+                            <div class="message-item">
+                                <div class="message-item-header">
+                                    <span class="message-item-forwarder"><i class="fa-solid fa-share"></i> Fwd by: <?php echo htmlspecialchars($msg['forwarded_by']); ?></span>
+                                    <span class="message-item-date"><?php echo htmlspecialchars($msg['formatted_date']); ?></span>
+                                </div>
+                                <span class="message-item-name"><?php echo htmlspecialchars($msg['sender_name']); ?></span>
+                                <span class="message-item-email"><?php echo htmlspecialchars($msg['sender_email']); ?></span>
+                                <div class="message-item-subject"><?php echo htmlspecialchars($msg['clean_subject']); ?></div>
+                                <div class="message-item-content">"<?php echo nl2br(htmlspecialchars($msg['content'])); ?>"</div>
+                                <div class="message-action-bar">
+                                    <button
+                                        type="button"
+                                        class="btn-reply"
+                                        onclick='openReplyMessageModal(<?php echo htmlspecialchars(json_encode($msg), ENT_QUOTES); ?>)'
+                                    >
+                                        <i class="fa-solid fa-reply"></i> Reply
+                                    </button>
+                                    <form action="admin.php" method="POST" style="margin-left: 10px;">
+                                        <input type="hidden" name="action" value="mark_message_read">
+                                        <input type="hidden" name="message_id" value="<?php echo $msg['id']; ?>">
+                                        <button type="submit" class="btn-mark-read"><i class="fa-solid fa-check"></i> Mark as Handled</button>
+                                    </form>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="addEventModal" class="modal-overlay">
+        <div class="modal-content wide">
+            <span class="close-modal" onclick="this.closest('.modal-overlay').style.display='none'">&times;</span>
+            <h2>Create New Event</h2>
+            <form action="admin.php" method="POST">
+                <input type="hidden" name="action" value="create_event">
+                <input type="text" name="title" placeholder="Event Title" required>
+                <textarea name="description" rows="3" placeholder="Event Description" required></textarea>
+                <input type="text" name="image_path" placeholder="Image URL (Optional)">
+                <input type="text" name="room" placeholder="Room/Location" required>
+                <input type="date" name="date" required>
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:1;">
+                        <label style="font-size: 0.8rem; color:#666; font-weight:bold;">Start Time</label>
+                        <input type="time" name="start_time" style="width:100%;" required>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size: 0.8rem; color:#666; font-weight:bold;">End Time</label>
+                        <input type="time" name="end_time" style="width:100%;" required>
+                    </div>
+                </div>
+                <button type="submit">Create Event</button>
             </form>
         </div>
     </div>
 
-    <div id="editMeetingModal" class="modal-overlay">
+    <div id="assignStaffModal" class="modal-overlay">
         <div class="modal-content">
-            <span class="close-modal" id="closeEditMeetingModal">&times;</span>
-            <h2>Edit Meeting</h2>
+            <span class="close-modal" onclick="this.closest('.modal-overlay').style.display='none'">&times;</span>
+            <h2>Assign Staff</h2>
+            <p style="margin-bottom: 10px; color: #555;">Assigning staff for: <strong id="assignEventTitle"></strong></p>
             <form action="admin.php" method="POST">
-                <input type="hidden" name="action" value="update_meeting">
-                <input type="hidden" id="edit_meeting_id" name="meeting_id">
-                <select id="edit_meeting_status" name="meeting_status" required>
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="Ended">Ended</option>
-                    <option value="Cancelled">Cancelled</option>
+                <input type="hidden" name="action" value="assign_event_staff">
+                <input type="hidden" name="event_id" id="assignEventId">
+                <select name="staff_id" id="assignStaffSelect" required>
+                    <option value="" disabled selected>-- Select Staff Member --</option>
+                    <option value="">(Unassign Staff)</option>
+                    <?php foreach ($staffList as $staff): ?>
+                        <option value="<?php echo $staff['id']; ?>"><?php echo htmlspecialchars($staff['fullname']); ?></option>
+                    <?php endforeach; ?>
                 </select>
-                <input type="text" id="edit_meeting_title" name="meeting_title" placeholder="Meeting Title" required>
-                <input type="text" id="edit_meeting_pic" name="meeting_pic" placeholder="Person In Charge (PIC)" required>
-                <input type="number" id="edit_meeting_attendees" name="meeting_attendees" placeholder="Expected Attendees" min="1" required>
-                <input type="date" id="edit_meeting_date" name="meeting_date" required>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <label for="edit_meeting_start_time" style="flex-shrink: 0;">From:</label>
-                    <input id="edit_meeting_start_time" type="time" name="meeting_start_time" required style="width: 100%;">
-                </div>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <label for="edit_meeting_end_time" style="flex-shrink: 0;">To:</label>
-                    <input id="edit_meeting_end_time" type="time" name="meeting_end_time" required style="width: 100%;">
-                </div>
-                <input type="text" id="edit_meeting_room" name="meeting_room" placeholder="Room Number" required>
-                <button type="submit">Update Meeting</button>
+                <button type="submit">Save Assignment</button>
             </form>
         </div>
     </div>
 
-    <div id="editUserModal" class="modal-overlay">
-        <div class="modal-content">
-            <span class="close-modal" id="closeModal">&times;</span>
-            <h2>Edit User</h2>
+    <div id="editEventModal" class="modal-overlay">
+        <div class="modal-content wide">
+            <span class="close-modal" onclick="this.closest('.modal-overlay').style.display='none'">&times;</span>
+            <h2>Edit Event Details</h2>
             <form action="admin.php" method="POST">
-                <input type="hidden" name="action" value="update_user">
-                <input type="hidden" id="editUserId" name="user_id">
-                <input type="text" id="editUserName" name="fullname" placeholder="Full Name" required>
-                <input type="email" id="editUserEmail" name="email" placeholder="Email" required>
-                <select id="editUserRole" name="role" required>
-                    <option value="Admin">Admin</option>
-                    <option value="User">User</option>
-                </select>
-                <button type="submit">Save Changes</button>
+                <input type="hidden" name="action" value="edit_event">
+                <input type="hidden" name="event_id" id="editEventId">
+                <input type="text" name="title" id="editEventTitle" placeholder="Event Title" required>
+                <textarea name="description" id="editEventDesc" rows="4" placeholder="Event Description" required></textarea>
+                <input type="text" name="room" id="editEventRoom" placeholder="Room/Location" required>
+                <input type="date" name="date" id="editEventDate" required>
+                <div style="display:flex; gap:10px;">
+                    <input type="time" name="start_time" id="editEventStart" style="flex:1;" required>
+                    <input type="time" name="end_time" id="editEventEnd" style="flex:1;" required>
+                </div>
+                <button type="submit">Update Event</button>
             </form>
         </div>
     </div>
 
     <div id="addUserModal" class="modal-overlay">
         <div class="modal-content">
-            <span class="close-modal" id="closeAddUserModal">&times;</span>
+            <span class="close-modal" onclick="this.closest('.modal-overlay').style.display='none'">&times;</span>
             <h2>Add New User</h2>
             <form action="admin.php" method="POST">
                 <input type="hidden" name="action" value="add_user">
                 <input type="text" name="fullname" placeholder="Full Name" required>
-                <input type="email" name="email" placeholder="Enter email" required>
+                <input type="email" name="email" placeholder="Email Address" required>
                 <select name="role" required>
-                    <option value="" disabled selected hidden>Select Role</option>
+                    <option value="" disabled selected>Select Role</option>
                     <option value="Admin">Admin</option>
-                    <option value="User">User</option>
+                    <option value="Staff">Staff</option>
                 </select>
                 <input type="password" name="password" placeholder="Create Password" required>
-                <button type="submit">Add User</button>
+                <button type="submit">Save User</button>
             </form>
         </div>
     </div>
 
-    <div id="addMeetingModal" class="modal-overlay">
+    <div id="editUserModal" class="modal-overlay">
         <div class="modal-content">
-            <span class="close-modal" id="closeAddMeetingModal">&times;</span>
-            <h2>Add New Meeting</h2>
-            <form id="meetingDetailsForm">
-                <input type="text" id="meeting_title" name="meeting_title" placeholder="Meeting Title" required>
-                <input type="text" id="meeting_pic" name="meeting_pic" placeholder="Person In Charge (PIC)" required>
-                <input type="number" id="meeting_attendees" name="meeting_attendees" placeholder="Expected Attendees" required>
-                <input type="date" id="meeting_date" name="meeting_date" required>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <label for="start_time" style="flex-shrink: 0;">From:</label>
-                    <input id="start_time" type="time" name="meeting_start_time" required style="width: 100%;">
-                </div>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <label for="end_time" style="flex-shrink: 0;">To:</label>
-                    <input id="end_time" type="time" name="meeting_end_time" required style="width: 100%;">
-                </div>
-                <button type="button" id="proceedToRoomBtn">Create Meeting</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="reserveRoomModal" class="modal-overlay">
-        <div class="modal-content">
-            <span class="close-modal" id="closeReserveRoomModal">&times;</span>
-            <h2>Reserve Room</h2>
+            <span class="close-modal" onclick="this.closest('.modal-overlay').style.display='none'">&times;</span>
+            <h2>Edit User</h2>
             <form action="admin.php" method="POST">
-                <input type="hidden" name="action" value="add_meeting">
-                <input type="hidden" id="hidden_meeting_title" name="meeting_title">
-                <input type="hidden" id="hidden_meeting_pic" name="meeting_pic">
-                <input type="hidden" id="hidden_meeting_attendees" name="meeting_attendees">
-                <input type="hidden" id="hidden_meeting_date" name="meeting_date">
-                <input type="hidden" id="hidden_meeting_start_time" name="meeting_start_time">
-                <input type="hidden" id="hidden_meeting_end_time" name="meeting_end_time">
-                <input type="text" name="meeting_room" placeholder="Enter Room Number" required>
-                <button type="submit">Confirm Reservation</button>
+                <input type="hidden" name="action" value="update_user">
+                <input type="hidden" name="user_id" id="editUserId">
+                <input type="text" name="fullname" id="editUserName" required>
+                <input type="email" name="email" id="editUserEmail" required>
+                <select name="role" id="editUserRole" required>
+                    <option value="Admin">Admin</option>
+                    <option value="Staff">Staff</option>
+                </select>
+                <button type="submit">Update User</button>
             </form>
         </div>
     </div>
 
-    <div id="messageRequestModal" class="modal-overlay">
-        <div class="message-request-content">
-            <span class="close-modal" id="closeMessageRequestModal">&times;</span>
-            <h2>MESSAGE REQUEST</h2>
-            <div class="message-request-divider"></div>
-            
-            <div class="message-list">
-                <?php if (empty($adminMessages)): ?>
-                    <p style="color: #ccc; font-style: italic; text-align: center;">No new message requests.</p>
-                <?php else: ?>
-                    <?php foreach ($adminMessages as $msg): ?>
-                        <?php
-                            $alertMessage = "Message from " . $msg['sender_name'] . " <" . $msg['sender_email'] . ">\n";
-                            $alertMessage .= "Sent: " . $msg['formatted_date'] . "\n\n";
-                            $alertMessage .= $msg['content'];
-                        ?>
-                        <div class="message-item" onclick="alert(<?php echo htmlspecialchars(json_encode($alertMessage), ENT_QUOTES, 'UTF-8'); ?>)">
-                            <img src="smsicon.svg" class="message-item-icon" alt="Message Icon">
-                            <div class="message-item-text">
-                                <span class="message-item-name"><?php echo htmlspecialchars($msg['sender_name']); ?></span>
-                                <span class="message-item-title">"<?php echo htmlspecialchars($msg['subject']); ?>"</span>
-                                <span class="message-item-meta"><?php echo htmlspecialchars($msg['sender_email']); ?> | <?php echo htmlspecialchars($msg['formatted_date']); ?></span>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
+    <div id="replyMessageModal" class="modal-overlay">
+        <div class="modal-content wide">
+            <span class="close-modal" onclick="this.closest('.modal-overlay').style.display='none'">&times;</span>
+            <h2>Reply to Message</h2>
+            <div style="margin-bottom: 15px; font-size:0.9rem; color:#444;">
+                <p><strong>From:</strong> <span id="replyMsgFrom"></span></p>
+                <p><strong>Subject:</strong> <span id="replyMsgSubject"></span></p>
+                <div id="replyMsgContent" style="background:#f0f0f0; padding:10px; border-radius:5px; margin-top:10px; font-style:italic;"></div>
             </div>
+            <form action="admin.php" method="POST">
+                <input type="hidden" name="action" value="reply_message">
+                <input type="hidden" name="message_id" id="replyMsgId">
+                <textarea name="reply_text" id="replyTextarea" rows="5" placeholder="Type your reply here..." required></textarea>
+                <button type="submit">Send Reply</button>
+            </form>
         </div>
     </div>
 
     <script>
-        // Opens the edit user popup and fills it with the selected user's data.
-        const editModal = document.getElementById('editUserModal');
-        const closeModalBtn = document.getElementById('closeModal');
+        // Tab Switching Logic
+        function switchTab(tabId, btnElement) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            btnElement.classList.add('active');
+        }
 
-        function openEditModal(id, name, email, role) {
+        // Open Edit User Modal
+        function openEditUserModal(id, name, email, role) {
             document.getElementById('editUserId').value = id;
             document.getElementById('editUserName').value = name;
             document.getElementById('editUserEmail').value = email;
             document.getElementById('editUserRole').value = role;
-            editModal.style.display = 'flex';
+            document.getElementById('editUserModal').style.display = 'flex';
         }
 
-        closeModalBtn.addEventListener('click', () => editModal.style.display = 'none');
-
-        // Opens and closes the add user popup.
-        const addUserModal = document.getElementById('addUserModal');
-        const closeAddUserModalBtn = document.getElementById('closeAddUserModal');
-        const addUserBtn = document.getElementById('addUserBtn');
-
-        addUserBtn.addEventListener('click', () => {
-            addUserModal.style.display = 'flex';
-        });
-
-        closeAddUserModalBtn.addEventListener('click', () => addUserModal.style.display = 'none');
-
-        // Opens and closes the first step of adding a meeting.
-        const addMeetingModal = document.getElementById('addMeetingModal');
-        const closeAddMeetingModalBtn = document.getElementById('closeAddMeetingModal');
-        const addMeetingBtn = document.getElementById('addMeetingBtn');
-
-        addMeetingBtn.addEventListener('click', () => {
-            addMeetingModal.style.display = 'flex';
-        });
-
-        closeAddMeetingModalBtn.addEventListener('click', () => addMeetingModal.style.display = 'none');
-
-        // Moves meeting details from step 1 into hidden fields for the room step.
-        const proceedToRoomBtn = document.getElementById('proceedToRoomBtn');
-        const reserveRoomModal = document.getElementById('reserveRoomModal');
-        const closeReserveRoomModalBtn = document.getElementById('closeReserveRoomModal');
-
-        proceedToRoomBtn.addEventListener('click', () => {
-            const meetingDetailsForm = document.getElementById('meetingDetailsForm');
-            if (!meetingDetailsForm.reportValidity()) {
-                return;
-            }
-
-            document.getElementById('hidden_meeting_title').value = document.getElementById('meeting_title').value;
-            document.getElementById('hidden_meeting_pic').value = document.getElementById('meeting_pic').value;
-            document.getElementById('hidden_meeting_attendees').value = document.getElementById('meeting_attendees').value;
-            document.getElementById('hidden_meeting_date').value = document.getElementById('meeting_date').value;
-            document.getElementById('hidden_meeting_start_time').value = document.getElementById('start_time').value;
-            document.getElementById('hidden_meeting_end_time').value = document.getElementById('end_time').value;
-
-            addMeetingModal.style.display = 'none';
-            reserveRoomModal.style.display = 'flex';
-        });
-
-        closeReserveRoomModalBtn.addEventListener('click', () => reserveRoomModal.style.display = 'none');
-
-        const messageModal = document.getElementById('messageModal');
-        const closeMessageModalBtn = document.getElementById('closeMessageModal');
-        const messageModalOkBtn = document.getElementById('messageModalOkBtn');
-
-        // Remove the success value from the URL so refreshing does not show the popup again.
-        if (messageModal && window.history.replaceState) {
-            const currentUrl = new URL(window.location.href);
-            if (currentUrl.searchParams.has('success')) {
-                currentUrl.searchParams.delete('success');
-                window.history.replaceState({}, '', currentUrl.pathname + currentUrl.search + currentUrl.hash);
-            }
+        function openReplyMessageModal(msg) {
+            document.getElementById('replyMsgId').value = msg.id;
+            document.getElementById('replyMsgFrom').innerText = `${msg.sender_name} (${msg.sender_email})`;
+            document.getElementById('replyMsgSubject').innerText = msg.clean_subject || msg.subject;
+            document.getElementById('replyMsgContent').innerText = `"${msg.content}"`;
+            document.getElementById('replyTextarea').value = '';
+            document.getElementById('replyMessageModal').style.display = 'flex';
         }
 
-        function closeMessageModal() {
-            if (messageModal) {
-                messageModal.style.display = 'none';
-            }
-        }
-
-        if (closeMessageModalBtn) {
-            closeMessageModalBtn.addEventListener('click', closeMessageModal);
-        }
-        if (messageModalOkBtn) {
-            messageModalOkBtn.addEventListener('click', closeMessageModal);
-        }
-
-        // Opens the delete meeting confirmation popup with the selected meeting name.
-        const deleteMeetingModal = document.getElementById('deleteMeetingModal');
-        const closeDeleteMeetingModalBtn = document.getElementById('closeDeleteMeetingModal');
-        const cancelDeleteMeetingBtn = document.getElementById('cancelDeleteMeetingBtn');
-        const deleteMeetingIdInput = document.getElementById('deleteMeetingId');
-        const deleteMeetingTitle = document.getElementById('deleteMeetingTitle');
-
-        document.querySelectorAll('.delete-meeting-btn').forEach((button) => {
-            button.addEventListener('click', () => {
-                deleteMeetingIdInput.value = button.dataset.meetingId;
-                deleteMeetingTitle.innerText = button.dataset.meetingTitle || 'this meeting';
-                deleteMeetingModal.style.display = 'flex';
+        // Open Edit Event Modal
+        document.querySelectorAll('.edit-event-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('editEventId').value = btn.dataset.id;
+                document.getElementById('editEventTitle').value = btn.dataset.title;
+                document.getElementById('editEventDesc').value = btn.dataset.desc;
+                document.getElementById('editEventRoom').value = btn.dataset.room;
+                document.getElementById('editEventDate').value = btn.dataset.date;
+                document.getElementById('editEventStart').value = btn.dataset.start;
+                document.getElementById('editEventEnd').value = btn.dataset.end;
+                document.getElementById('editEventModal').style.display = 'flex';
             });
         });
 
-        function closeDeleteMeetingModal() {
-            deleteMeetingModal.style.display = 'none';
-            deleteMeetingIdInput.value = '';
-            deleteMeetingTitle.innerText = 'this meeting';
-        }
-
-        closeDeleteMeetingModalBtn.addEventListener('click', closeDeleteMeetingModal);
-        cancelDeleteMeetingBtn.addEventListener('click', closeDeleteMeetingModal);
-
-        const editMeetingModal = document.getElementById('editMeetingModal');
-        const closeEditMeetingModalBtn = document.getElementById('closeEditMeetingModal');
-
-        // Opens the edit meeting popup and copies the card data into the form fields.
-        document.querySelectorAll('.edit-meeting-btn').forEach((button) => {
-            button.addEventListener('click', () => {
-                document.getElementById('edit_meeting_id').value = button.dataset.meetingId;
-                document.getElementById('edit_meeting_status').value = button.dataset.meetingStatus;
-                document.getElementById('edit_meeting_title').value = button.dataset.meetingTitle;
-                document.getElementById('edit_meeting_pic').value = button.dataset.meetingPic;
-                document.getElementById('edit_meeting_attendees').value = button.dataset.meetingAttendees;
-                document.getElementById('edit_meeting_room').value = button.dataset.meetingRoom;
-                document.getElementById('edit_meeting_date').value = button.dataset.meetingDate;
-                document.getElementById('edit_meeting_start_time').value = button.dataset.meetingStartTime;
-                document.getElementById('edit_meeting_end_time').value = button.dataset.meetingEndTime;
-                editMeetingModal.style.display = 'flex';
+        // Open Assign Staff Modal
+        document.querySelectorAll('.assign-staff-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('assignEventId').value = btn.dataset.id;
+                document.getElementById('assignEventTitle').innerText = btn.dataset.title;
+                let select = document.getElementById('assignStaffSelect');
+                select.value = btn.dataset.staff ? btn.dataset.staff : "";
+                document.getElementById('assignStaffModal').style.display = 'flex';
             });
         });
 
-        closeEditMeetingModalBtn.addEventListener('click', () => editMeetingModal.style.display = 'none');
-
-        // View Message Requests Logic
-        const messageRequestModal = document.getElementById('messageRequestModal');
-        const messageRequestBtn = document.getElementById('messageRequestBtn');
-        const closeMessageRequestModalBtn = document.getElementById('closeMessageRequestModal');
-
-        messageRequestBtn.addEventListener('click', () => {
-            messageRequestModal.style.display = 'flex';
-        });
-
-        closeMessageRequestModalBtn.addEventListener('click', () => {
-            messageRequestModal.style.display = 'none';
-        });
-
-        // Clicking the dark background outside a popup closes that popup.
+        // Close Modals on outside click
         window.addEventListener('click', (e) => {
-            if (e.target === messageModal) closeMessageModal();
-            if (e.target === deleteMeetingModal) closeDeleteMeetingModal();
-            if (e.target === editMeetingModal) editMeetingModal.style.display = 'none';
-            if (e.target === editModal) editModal.style.display = 'none';
-            if (e.target === addUserModal) addUserModal.style.display = 'none';
-            if (e.target === addMeetingModal) addMeetingModal.style.display = 'none';
-            if (e.target === reserveRoomModal) reserveRoomModal.style.display = 'none';
-            if (e.target === messageRequestModal) messageRequestModal.style.display = 'none';
+            if (e.target.classList.contains('modal-overlay')) {
+                e.target.style.display = 'none';
+            }
         });
-    </script>
-    <script>
-        // Registers the service worker so the app can cache basic files for PWA support.
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').catch((error) => {
-                    console.error('Service worker registration failed:', error);
-                });
-            });
+        
+        // Clean URL after success/error alerts
+        if (window.history.replaceState) {
+            const currentUrl = new URL(window.location.href);
+            if (currentUrl.searchParams.has('success') || currentUrl.searchParams.has('error')) {
+                currentUrl.searchParams.delete('success');
+                currentUrl.searchParams.delete('error');
+                window.history.replaceState({}, '', currentUrl.pathname);
+            }
         }
     </script>
-
 </body>
 </html>

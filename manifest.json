@@ -1,7 +1,7 @@
 {
-  "name": "Meeting Scheduler",
+  "name": "Event Scheduler",
   "short_name": "Scheduler",
-  "description": "Meeting room scheduling dashboard for admins and users.",
+  "description": "Event scheduling dashboard for admins, staff, and visitors.",
   "start_url": "login.php",
   "scope": "./",
   "display": "standalone",

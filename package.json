@@ -2,7 +2,7 @@
   "name": "scheduler",
   "version": "1.0.0",
   "private": true,
-  "description": "Meeting Scheduler PWA assets and Grunt build tasks.",
+  "description": "Event Scheduler PWA assets and Grunt build tasks.",
   "scripts": {
     "build": "grunt",
     "watch": "grunt watch"
