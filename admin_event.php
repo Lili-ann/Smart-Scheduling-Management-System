@@ -4,6 +4,8 @@ require_once "db.php";
 
 // Allow Admin and Staff
 $role = $_SESSION['user_role'] ?? '';
+$userId = (int)($_SESSION['user_id'] ?? 0);
+
 if ($role !== 'Admin' && $role !== 'Staff') {
     header("Location: login.php?error=Access Denied");
     exit();
@@ -14,33 +16,49 @@ if ($eventId <= 0) {
     die("Invalid Event ID.");
 }
 
-// Fetch session flash data if available across the redirect redirect
+// 1. FETCH EVENT FIRST FOR SECURITY
+$stmt = $conn->prepare("SELECT * FROM events WHERE id = ?");
+$stmt->bind_param("i", $eventId);
+$stmt->execute();
+$event = $stmt->get_result()->fetch_assoc();
+
+if (!$event) {
+    die("Event not found.");
+}
+
+// 2. STRICT SECURITY CHECK FOR STAFF
+if ($role === 'Staff' && (int)$event['assigned_staff_id'] !== $userId) {
+    header("Location: user.php?error=Access Denied. You can only edit your own assigned events.");
+    exit();
+}
+
+// Fetch session flash data if available across the redirect
 $message = $_SESSION['flash_message'] ?? '';
 $messageType = $_SESSION['flash_type'] ?? '';
-$generatedCode = $_SESSION['generated_code'] ?? '';
 
 // Clear flash data immediately so it doesn't linger on subsequent refreshes
-unset($_SESSION['flash_message'], $_SESSION['flash_type'], $_SESSION['generated_code']);
+unset($_SESSION['flash_message'], $_SESSION['flash_type']);
 
 // Create uploads directory if it doesn't exist
 if (!is_dir('uploads')) {
     mkdir('uploads', 0777, true);
 }
 
-// Handle Form Actions
+// 3. HANDLE FORM ACTIONS (Now fully secured)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'save_event') {
-        $title = trim($_POST['title'] ?? '');
-        $desc = trim($_POST['description'] ?? '');
-        $room = trim($_POST['room'] ?? '');
-        $date = trim($_POST['date'] ?? '');
-        
-        $stmt = $conn->prepare("UPDATE events SET title=?, description=?, room=?, date=? WHERE id=?");
-        $stmt->bind_param("ssssi", $title, $desc, $room, $date, $eventId);
-        $stmt->execute();
-    } 
+            $title = trim($_POST['title'] ?? '');
+            $desc = trim($_POST['description'] ?? '');
+            $room = trim($_POST['room'] ?? '');
+            $date = trim($_POST['date'] ?? '');
+            $imagePath = trim($_POST['image_path'] ?? ''); // <-- Grabs the new image URL
+            
+            $stmt = $conn->prepare("UPDATE events SET title=?, description=?, room=?, date=?, image_path=? WHERE id=?");
+            $stmt->bind_param("sssssi", $title, $desc, $room, $date, $imagePath, $eventId);
+            $stmt->execute();
+        }
     elseif ($action === 'extend_time') {
         $extDate = trim($_POST['extended_date'] ?? '');
         $extStart = trim($_POST['extended_start'] ?? '');
@@ -50,29 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_param("sssi", $extDate, $extStart, $extEnd, $eventId);
         $stmt->execute();
     } 
-    elseif ($action === 'generate_code') {
-        $customCode = trim($_POST['custom_code'] ?? '');
-        
-        if (!empty($customCode)) {
-            $newCode = strtoupper(preg_replace("/[^A-Za-z0-9]/", "", $customCode));
-        } else {
-            $newCode = substr(str_shuffle("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"), 0, 6);
-        }
-        
-        if (!empty($newCode)) {
-            $stmt = $conn->prepare("INSERT INTO visitor_codes (event_id, code) VALUES (?, ?)");
-            $stmt->bind_param("is", $eventId, $newCode);
-            
-            if ($stmt->execute()) {
-                $_SESSION['generated_code'] = $newCode;
-                $_SESSION['flash_message'] = "Visitor code generated successfully: " . $newCode;
-                $_SESSION['flash_type'] = "success";
-            } else {
-                $_SESSION['flash_message'] = "Failed to generate code. Please try again.";
-                $_SESSION['flash_type'] = "error";
-            }
-        }
-    }
     elseif ($action === 'upload_image') {
         if (isset($_FILES['gallery_file']) && $_FILES['gallery_file']['error'] === UPLOAD_ERR_OK) {
             $tmpName = $_FILES['gallery_file']['tmp_name'];
@@ -96,18 +91,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif ($action === 'delete_image') {
         $imgId = (int)($_POST['image_id'] ?? 0);
         
-        // 1. Get the path first
         $stmt = $conn->prepare("SELECT image_path FROM event_gallery WHERE id = ? AND event_id = ?");
         $stmt->bind_param("ii", $imgId, $eventId);
         $stmt->execute();
         $res = $stmt->get_result()->fetch_assoc();
         
-        // 2. Perform file system deletion
         if ($res && file_exists($res['image_path'])) {
             unlink($res['image_path']); 
         }
         
-        // 3. Perform database deletion
         $stmtDel = $conn->prepare("DELETE FROM event_gallery WHERE id = ? AND event_id = ?");
         $stmtDel->bind_param("ii", $imgId, $eventId);
         $stmtDel->execute();
@@ -115,16 +107,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     header("Location: admin_event.php?id=" . $eventId);
     exit();
-}
-
-// Fetch event data
-$stmt = $conn->prepare("SELECT * FROM events WHERE id = ?");
-$stmt->bind_param("i", $eventId);
-$stmt->execute();
-$event = $stmt->get_result()->fetch_assoc();
-
-if (!$event) {
-    die("Event not found.");
 }
 
 // Fetch gallery data
@@ -148,15 +130,13 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             --primary-hover: #1f0b4d;
         }
 
-        /* Fixed Curve Header matching Screenshot 1 exactly */
         .top-bg-curve {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
-            height: 200px; /* Slightly increased height to allow the deep left-side curve room to breathe */
+            height: 200px;
             z-index: 1;
-            /* Updated SVG path: Starts deep on the left (y=192) and slants upward to a thin tail on the right (y=48) */
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320' preserveAspectRatio='none'%3E%3Cpath fill='%2311062B' d='M0,192 C360,240 720,160 1080,96 C1260,64 1350,48 1440,48 L1440,0 L0,0 Z'%3E%3C/path%3E%3C/svg%3E");
             background-size: 100% 100%;
             background-repeat: no-repeat;
@@ -178,25 +158,6 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             font-weight: 500;
         }
 
-        .mail-icon-link {
-            background: #11062B;
-            width: 55px;
-            height: 55px;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            border: 4px solid #fff;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            color: #fff;
-            font-size: 1.3rem;
-            text-decoration: none;
-            transition: transform 0.2s ease, background-color 0.2s ease;
-        }
-        .mail-icon-link:hover {
-            transform: scale(1.05);
-        }
-
         /* Main Layout */
         .container {
             position: relative; 
@@ -206,7 +167,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             display: grid; 
             grid-template-columns: 1.1fr 0.9fr; 
             gap: 60px; 
-            padding: 0 40px;
+            padding: 80px 40px;;
             align-items: start;
         }
 
@@ -218,6 +179,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             border-radius: 20px; 
             box-shadow: 0 10px 25px rgba(0,0,0,0.15); 
             margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
         }
         
         .edit-block {
@@ -227,6 +189,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             display: flex; 
             justify-content: space-between; 
             align-items: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
         }
         .edit-block input {
             font-size: 1.3rem; 
@@ -288,6 +251,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             margin-right: 10px; 
             color: #666;
             font-size: 0.85rem;
+            border: 1px solid #11062B;
         }
         
         .btn-extend {
@@ -302,17 +266,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             align-items: center; 
             gap: 5px;
             font-size: 0.9rem;
-        }
-        .btn-generate {
-            background: #11062B; 
-            color: #fff; 
-            border: none; 
-            border-radius: 20px;
-            padding: 8px 20px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            margin-left: 10px;
-            font-size: 0.9rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); 
         }
 
         /* Right Side Column Layout Components */
@@ -330,7 +284,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             padding: 45px 20px; 
             text-align: center; 
             margin-bottom: 35px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             cursor: pointer;
         }
         .upload-icon { 
@@ -358,7 +312,8 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             border: none; 
             border-radius: 20px;
             padding: 10px 35px; 
-            font-size: 0.95rem; 
+            font-size: 0.95rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
             cursor: pointer; 
             font-weight: bold;
         }
@@ -374,7 +329,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             padding: 12px 20px;
             display: flex; 
             align-items: center; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.06); 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
             border: 1px solid #eee;
         }
         .gallery-item img {
@@ -402,6 +357,8 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             margin: 40px auto 0;
             font-size: 1rem;
             letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            
         }
 
         /* Modal Elements */
@@ -443,8 +400,6 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             background: #fff; color: #000; border: none; border-radius: 25px;
             padding: 10px 30px; font-weight: bold; display: block; margin: 25px auto 0; cursor: pointer;
         }
-
-        #modalCodeBox { background: #18093E; }
     </style>
 </head>
 <body>
@@ -452,7 +407,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
     <div class="top-bg-curve"></div>
 
     <div class="header-content">
-        <a href="<?= $role === 'Admin' ? 'admin.php' : 'events.php' ?>" class="back-link">Back</a>
+        <a href="<?= $role === 'Admin' ? 'admin.php' : 'user.php' ?>" class="back-link">Back</a>
     </div>
 
     <form id="mainSaveForm" method="POST" action="admin_event.php?id=<?= $eventId ?>"></form>
@@ -471,6 +426,11 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
             </div>
 
             <div class="form-row">
+                <label>Poster URL:</label>
+                <input type="text" name="image_path" value="<?= htmlspecialchars($event['image_path'] ?? '') ?>" class="input-pill" form="mainSaveForm" placeholder="Paste image URL here">
+            </div>
+
+            <div class="form-row">
                 <label>Room:</label>
                 <input type="text" name="room" value="<?= htmlspecialchars($event['room'] ?? '') ?>" class="input-pill" form="mainSaveForm" placeholder="Room 606">
             </div>
@@ -486,18 +446,9 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
                 <input type="text" value="<?= htmlspecialchars(substr($event['end_time'], 0, 5)) ?>" class="time-box" readonly>
                 <button type="button" class="btn-extend" onclick="openModal('timeModal')">Extend <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.8rem;"></i></button>
             </div>
-
-            <form method="POST" id="codeGenerateForm" action="admin_event.php?id=<?= $eventId ?>">
-                <input type="hidden" name="action" value="generate_code">
-                <div class="form-row">
-                    <label>Code:</label>
-                    <input type="text" name="custom_code" value="<?= htmlspecialchars($generatedCode) ?>" class="input-pill" placeholder="Leave blank to auto-generate">
-                    <button type="button" class="btn-generate" onclick="openModal('codeModal')">Generate Code</button>
-                </div>
-            </form>
         </div>
 
-<div class="right-col">
+        <div class="right-col">
             <h2 class="right-title">Event Recap</h2>
             
             <form method="POST" enctype="multipart/form-data" id="uploadForm" action="admin_event.php?id=<?= $eventId ?>">
@@ -505,7 +456,7 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
                 <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
                     <span class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></span>
                     <p>Drag and drop files here to Upload</p>
-                    <a href="#">Select Image from gdrive or device</a>
+                    <a href="#">Select Image from device</a>
                     <input type="file" name="gallery_file" id="fileInput" style="display: none;" onchange="document.getElementById('uploadForm').submit()">
                     <button type="button" class="btn-upload-img">Upload Image</button>
                 </div>
@@ -549,23 +500,12 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
                         <input type="time" name="extended_end" class="modal-input" value="<?= htmlspecialchars($event['end_time']) ?>">
                     </div>
                 </div>
-                <button type="submit" class="btn-modal-submit">Send Request</button>
+                <button type="submit" class="btn-modal-submit">Save</button>
             </form>
         </div>
     </div>
 
-    <div id="codeModal" class="modal-overlay">
-        <div class="modal-box" id="modalCodeBox">
-            <h2>Invitation Code</h2>
-            <div class="modal-row" style="justify-content: center;">
-                <input type="text" class="modal-input" value="<?= htmlspecialchars($generatedCode) ?>" readonly style="width: 80%; padding: 12px;">
-            </div>
-            <button type="submit" form="codeGenerateForm" class="btn-modal-submit">Generate</button>
-        </div>
-    </div>
-
     <script>
-        // Modal window alignment control routines definitions handler settings
         function openModal(id) {
             const overlay = document.getElementById(id);
             overlay.style.display = 'flex';
@@ -580,10 +520,6 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
                 if(e.target === this) this.style.display = 'none';
             });
         });
-
-        <?php if (!empty($generatedCode)): ?>
-            openModal('codeModal');
-        <?php endif; ?>
 
         function makeDraggable(boxId) {
             const el = document.getElementById(boxId);
@@ -614,7 +550,6 @@ $galleries = $galleryRes->fetch_all(MYSQLI_ASSOC);
         }
 
         makeDraggable('modalTimeBox');
-        makeDraggable('modalCodeBox');
 
         if (window.history.replaceState) {
             window.history.replaceState(null, null, window.location.href);

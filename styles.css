@@ -495,6 +495,8 @@
             flex-shrink: 0;
         }
 
+        
+
         .option-btn:hover {
             background-color: #11062b;
             color: white;
@@ -568,3 +570,31 @@
 
         
         }
+
+        
+
+        /* ==========================================================================
+   7. SEND MESSAGE / REQUEST CODE MODAL
+   ========================================================================== */
+.send-message-content {
+    background: #11062b;
+    color: white;
+    padding: 40px;
+    border-radius: 15px;
+    width: 100%;
+    max-width: 450px;
+    position: relative;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+}
+.send-message-content h2 { margin-bottom: 5px; color: white; text-transform: uppercase; font-size: 1.5rem; letter-spacing: 0.5px; }
+.send-message-divider { height: 4px; background: white; width: 100%; margin-bottom: 25px; border-radius: 2px; }
+.send-message-content .close-modal { color: white; position: absolute; top: 20px; right: 20px; cursor: pointer; font-size: 1.8rem; line-height: 1; }
+.send-message-content .close-modal:hover { color: #ccc; }
+.send-message-form { display: flex; flex-direction: column; gap: 15px; }
+.send-message-group { display: flex; align-items: center; gap: 10px; }
+.send-message-group label { width: 60px; font-size: 0.9rem; font-weight: bold; color: white; }
+.send-message-group input, .send-message-form textarea { flex: 1; padding: 10px 15px; border-radius: 8px; border: none; outline: none; color: #333; font-family: inherit; }
+.send-message-form textarea { width: 100%; height: 120px; resize: none; margin-top: 5px; }
+.send-message-submit-wrapper { display: flex; justify-content: center; margin-top: 15px; }
+.send-message-submit-wrapper button { background: white !important; color: #11062b !important; border: none; padding: 12px 30px !important; border-radius: 25px !important; font-size: 0.9rem !important; font-weight: bold; cursor: pointer; transition: 0.3s; }
+.send-message-submit-wrapper button:hover { background: #eee !important; transform: translateY(-2px); }

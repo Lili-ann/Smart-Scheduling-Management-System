@@ -8,7 +8,7 @@ $conn = new mysqli($host, $username, $password, $database);
 if ($conn->connect_error) { die("Database connection failed: " . $conn->connect_error); }
 $conn->set_charset("utf8mb4");
 
-// Create Users Table (Updated Role Enum)
+// 1. Create Users Table
 $conn->query("CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     fullname VARCHAR(100) NOT NULL,
@@ -19,7 +19,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )");
 
-// Create Admin Messages
+// 2. Create Admin Messages Table
 $conn->query("CREATE TABLE IF NOT EXISTS admin_messages (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     sender_id INT UNSIGNED NULL,
@@ -32,7 +32,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS admin_messages (
     CONSTRAINT fk_admin_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL
 )");
 
-// Create Events
+// 3. Create Events Table
 $conn->query("CREATE TABLE IF NOT EXISTS events (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -47,19 +47,22 @@ $conn->query("CREATE TABLE IF NOT EXISTS events (
     CONSTRAINT fk_events_staff FOREIGN KEY (assigned_staff_id) REFERENCES users(id) ON DELETE SET NULL
 )");
 
-// Event Gallery
+// 4. Create Event Gallery Table
 $conn->query("CREATE TABLE IF NOT EXISTS event_gallery (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     event_id INT UNSIGNED NOT NULL,
     image_path VARCHAR(255) NOT NULL,
+    uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_event_gallery FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
 )");
 
-// Visitor Codes
+// 5. Create Visitor Invitation Codes Table
 $conn->query("CREATE TABLE IF NOT EXISTS visitor_invitation_codes (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(40) NOT NULL UNIQUE,
     label VARCHAR(100) NOT NULL DEFAULT 'Visitor Access',
-    is_active TINYINT(1) NOT NULL DEFAULT 1
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    last_used_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 )");
 ?>

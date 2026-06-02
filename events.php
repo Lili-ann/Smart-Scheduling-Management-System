@@ -769,28 +769,48 @@ $conn->close();
         }
 
         async function sendMessageToServer(payload) {
-            const typingIndicator = document.createElement('div');
-            typingIndicator.classList.add('message', 'bot-message');
-            typingIndicator.textContent = "Typing...";
-            chatMessages.appendChild(typingIndicator);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+                    const typingIndicator = document.createElement('div');
+                    typingIndicator.classList.add('message', 'bot-message');
+                    typingIndicator.textContent = "Typing...";
+                    chatMessages.appendChild(typingIndicator);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
 
-            try {
-                // Fetch to backend endpoint
-                const response = await fetch('faq-chat.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                    try {
+                        const response = await fetch('faq-chat.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
 
-                const data = await response.json();
-                chatMessages.removeChild(typingIndicator);
-                appendMessage(data.reply, 'bot');
-            } catch (error) {
-                chatMessages.removeChild(typingIndicator);
-                appendMessage("Sorry, I'm having trouble connecting to the server.", 'bot');
-            }
-        }
+                        const data = await response.json();
+                        chatMessages.removeChild(typingIndicator);
+                        appendMessage(data.reply, 'bot');
+                        
+                        // NEW: Show "Contact Staff" button if the bot didn't know the answer
+                        if (data.showContactBtn) {
+                            const btnWrap = document.createElement('div');
+                            btnWrap.style.marginTop = '10px';
+                            const contactBtn = document.createElement('button');
+                            contactBtn.innerHTML = '✉️ Contact Staff';
+                            contactBtn.className = 'option-btn';
+                            contactBtn.style.background = '#11062b';
+                            contactBtn.style.color = 'white';
+                            
+                            contactBtn.onclick = () => {
+                                document.getElementById('faqModal').style.display = 'none';
+                                document.getElementById('sendMessageModal').style.display = 'flex';
+                            };
+                            
+                            btnWrap.appendChild(contactBtn);
+                            chatMessages.lastElementChild.appendChild(btnWrap);
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
+                        
+                    } catch (error) {
+                        chatMessages.removeChild(typingIndicator);
+                        appendMessage("Sorry, I'm having trouble connecting to the server.", 'bot');
+                    }
+                }
 
         optionButtons.forEach(button => {
             button.addEventListener('click', function() {

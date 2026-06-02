@@ -22,11 +22,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         "events" => "q_events"
     ];
 
-    $response = "I'm sorry, I couldn't find an exact answer for that. Please try Contacting our staff for more help.";
+    $response = "I'm sorry, I couldn't find an exact answer for that. Would you like to ask our staff directly?";
+    $showContactBtn = true; // Default to showing the contact button for unknown queries
 
     // Check if they clicked a button (sent an ID)
     if (!empty($input['id']) && isset($faqDb[$input['id']])) {
         $response = $faqDb[$input['id']];
+        $showContactBtn = false; // We found the answer, no need for the button
     } 
     // Check if they typed a message
     elseif (!empty($input['message'])) {
@@ -34,13 +36,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($keywordMap as $keyword => $id) {
             if (strpos($userMessage, $keyword) !== false) {
                 $response = $faqDb[$id];
-                break; // Stop looking once we find a match
+                $showContactBtn = false; // We found a keyword match
+                break;
             }
         }
     }
 
     header('Content-Type: application/json');
-    echo json_encode(["reply" => $response]);
+    echo json_encode([
+        "reply" => $response,
+        "showContactBtn" => $showContactBtn
+    ]);
     exit; 
 }
 ?>

@@ -88,7 +88,6 @@ if (isset($_GET['success'])) {
     $message = $_GET['success'];
     $messageType = 'success';
 }
-
 // ----------------------------------------------------
 // 1. LOAD EVENTS (ONLY FOR THIS SPECIFIC USER)
 // ----------------------------------------------------
@@ -108,6 +107,10 @@ try {
     if ($result && $result->num_rows > 0) {
         while ($row = $result->fetch_assoc()) {
             $events[] = $row;
+            // Record event days for the calendar
+            if (strpos($row['date'], $calendarDate->format('Y-m')) === 0) {
+                $eventDays[] = (int)(new DateTime($row['date']))->format('j');
+            }
         }
     }
     $stmt->close();
@@ -162,6 +165,11 @@ $conn->close();
         .divider { width: 1px; background-color: #d1d1d1; margin: 0 10px; }
         .right-panel { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 24px; }
 
+        /* Alerts */
+        .alert-box { padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; text-align: center; }
+        .alert-success { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+        .alert-error { background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
+
         /* Toolbars & Buttons */
         .request-toolbar { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 24px; }
         .btn-request-room { background-color: #11072b; color: white; border: none; padding: 12px 28px; border-radius: 25px; font-size: 1rem; cursor: pointer; text-decoration: none; }
@@ -175,10 +183,16 @@ $conn->close();
         .event-card:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.2); }
         .event-card-image-wrapper { position: relative; width: 100%; padding-top: 70%; }
         .event-card-image-wrapper img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        .event-card-body { padding: 20px; display: flex; flex-direction: column; gap: 5px; }
+        .event-card-body { padding: 20px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
         .event-card-body h3 { font-size: 1.25rem; color: #11062b; }
         .event-card-body p { font-size: 0.85rem; color: #555; }
         
+        /* New Action Bar for Staff Event Cards */
+        .event-actions { display: flex; border-top: 1px solid #eee; background: #fdfdfd; }
+        .event-action-btn { flex: 1; padding: 12px; border: none; background: transparent; cursor: pointer; font-size: 0.9rem; font-weight: bold; color: #11062b; text-align: center; text-decoration: none; transition: 0.2s; display: inline-flex; justify-content: center; align-items: center; gap: 6px; }
+        .event-action-btn:hover { background: #eee; }
+        .event-action-btn:first-child { border-right: 1px solid #eee; }
+
         /* Calendar */
         .calendar-container { background-color: #3f517e; width: 100%; max-width: 380px; border-radius: 5px; padding: 25px 30px; color: white; box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2); margin: -20px auto 0; }
         .calendar-header { display: flex; justify-content: space-between; font-size: 1.6rem; font-weight: bold; margin-bottom: 30px; }
@@ -226,11 +240,15 @@ $conn->close();
     <main class="main-content">
         
         <section class="left-panel">
-            <div class="request-toolbar">
-                <a href="events.php" class="btn-request-room">All Events</a>
-            </div>
+        
             
-            <h2 class="section-title">My Upcoming Events</h2>
+            <?php if(!empty($message)): ?>
+                <div class="alert-box <?php echo $messageType === 'success' ? 'alert-success' : 'alert-error'; ?>">
+                    <?php echo htmlspecialchars($message); ?>
+                </div>
+            <?php endif; ?>
+
+            <h2 class="section-title">Assigned Events</h2>
             <div class="cards-grid">
                 <?php 
                 $todayStr = $todayDate->format('Y-m-d');
@@ -239,21 +257,24 @@ $conn->close();
                     <p class="empty-state">No upcoming events assigned to you.</p>
                 <?php else: ?>
                     <?php foreach ($upcoming as $evt): ?>
-                        <div class="event-card" onclick="location.href='event_details.php?id=<?php echo $evt['id']; ?>'">
-                            <div class="event-card-image-wrapper">
+                        <div class="event-card">
+                            <div class="event-card-image-wrapper" onclick="location.href='event_details.php?id=<?php echo $evt['id']; ?>'">
                                 <img src="<?php echo htmlspecialchars($evt['image_path']); ?>" alt="Poster">
                             </div>
-                            <div class="event-card-body">
+                            <div class="event-card-body" onclick="location.href='event_details.php?id=<?php echo $evt['id']; ?>'">
                                 <h3><?php echo htmlspecialchars($evt['title']); ?></h3>
                                 <p><i class="fa-regular fa-calendar"></i> <?php echo (new DateTime($evt['date']))->format('M d, Y'); ?> | <?php echo (new DateTime($evt['start_time']))->format('h:i A'); ?></p>
                                 <p><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($evt['room']); ?></p>
+                            </div>
+                            <div class="event-actions">
+                                <a href="admin_event.php?id=<?php echo $evt['id']; ?>" class="event-action-btn"><i class="fa-solid fa-pen"></i> Edit</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
 
-            <h2 class="section-title">My Past Events</h2>
+            <h2 class="section-title">Past Events</h2>
             <div class="cards-grid">
                 <?php 
                 $past = array_filter($events, fn($e) => $e['date'] < $todayStr);
@@ -261,14 +282,17 @@ $conn->close();
                     <p class="empty-state">No past events assigned to you.</p>
                 <?php else: ?>
                     <?php foreach (array_reverse($past) as $evt): ?>
-                        <div class="event-card" onclick="location.href='event_details.php?id=<?php echo $evt['id']; ?>'">
-                            <div class="event-card-image-wrapper">
+                        <div class="event-card">
+                            <div class="event-card-image-wrapper" onclick="location.href='event_details.php?id=<?php echo $evt['id']; ?>'">
                                 <img src="<?php echo htmlspecialchars($evt['image_path']); ?>" alt="Poster">
                             </div>
-                            <div class="event-card-body">
+                            <div class="event-card-body" onclick="location.href='event_details.php?id=<?php echo $evt['id']; ?>'">
                                 <h3><?php echo htmlspecialchars($evt['title']); ?></h3>
                                 <p><i class="fa-regular fa-calendar"></i> <?php echo (new DateTime($evt['date']))->format('M d, Y'); ?> | <?php echo (new DateTime($evt['start_time']))->format('h:i A'); ?></p>
                                 <p><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($evt['room']); ?></p>
+                            </div>
+                            <div class="event-actions">
+                                <a href="admin_event.php?id=<?php echo $evt['id']; ?>" class="event-action-btn"><i class="fa-solid fa-pen"></i> Edit</a>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -323,17 +347,6 @@ $conn->close();
 
     </main>
 
-    <?php if (!empty($message)): ?>
-        <div id="messageModal" class="modal-overlay" style="display: flex;">
-            <div class="modal-content">
-                <span class="close-modal" id="closeMessageModal">&times;</span>
-                <h2><?php echo $messageType === 'success' ? 'Success' : 'Notice'; ?></h2>
-                <p style="line-height: 1.5; margin-bottom: 20px;"><?php echo htmlspecialchars($message); ?></p>
-                <button type="button" onclick="document.getElementById('messageModal').style.display='none'" style="width: 100%;">OK</button>
-            </div>
-        </div>
-    <?php endif; ?>
-
     <div id="replyMessageModal" class="modal-overlay">
         <div class="modal-content">
             <span class="close-modal" onclick="document.getElementById('replyMessageModal').style.display='none'">&times;</span>
@@ -357,14 +370,25 @@ $conn->close();
     </div>
 
     <script>
-        // Clean URL after success messages
+        // Clean URL after success messages and auto-hide alerts
         if (window.history.replaceState) {
             const currentUrl = new URL(window.location.href);
-            if (currentUrl.searchParams.has('success')) {
+            if (currentUrl.searchParams.has('success') || currentUrl.searchParams.has('error')) {
                 currentUrl.searchParams.delete('success');
+                currentUrl.searchParams.delete('error');
                 window.history.replaceState({}, '', currentUrl.pathname);
             }
         }
+
+        // Auto-hide the alert box after 4 seconds
+        setTimeout(() => {
+            const alertBox = document.querySelector('.alert-box');
+            if (alertBox) {
+                alertBox.style.transition = 'opacity 0.5s ease';
+                alertBox.style.opacity = '0';
+                setTimeout(() => alertBox.remove(), 500); 
+            }
+        }, 4000);
 
         // Open Reply to Message Modal
         function openReplyModal(msg) {
@@ -372,7 +396,7 @@ $conn->close();
             document.getElementById('replyMsgFrom').innerText = `${msg.sender_name} (${msg.sender_email})`;
             document.getElementById('replyMsgSubject').innerText = msg.subject;
             document.getElementById('replyMsgContent').innerText = `"${msg.content}"`;
-            document.getElementById('replyTextarea').value = ''; // clear previous inputs
+            document.getElementById('replyTextarea').value = ''; 
             document.getElementById('replyMessageModal').style.display = 'flex';
         }
 

@@ -67,6 +67,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $message = "Please fill in all required event fields.";
         }
     }
+    // NEW: Delete Event Logic
+    elseif ($action === 'delete_event') {
+        $eventId = (int)($_POST['event_id'] ?? 0);
+        if ($eventId > 0) {
+            $stmt = $conn->prepare("DELETE FROM events WHERE id = ?");
+            $stmt->bind_param("i", $eventId);
+            $stmt->execute();
+            header("Location: admin.php?success=Event deleted successfully");
+            exit();
+        }
+    }
 
     // --- USER ACTIONS ---
     elseif ($action === 'add_user') {
@@ -142,6 +153,29 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         $message = "Please type a reply before sending.";
     }
+    
+    // --- GENERATE VISITOR CODE ---
+    elseif ($action === 'generate_visitor_code') {
+        $msgId = (int)($_POST['message_id'] ?? 0);
+        $visitorEmail = trim($_POST['visitor_email'] ?? 'the visitor');
+        
+        if ($msgId > 0) {
+            $newCode = substr(str_shuffle("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"), 0, 6);
+            
+            // Insert into the proper visitor invitation table
+            $stmt = $conn->prepare("INSERT INTO visitor_invitation_codes (code, label) VALUES (?, 'Generated via Request')");
+            $stmt->bind_param("s", $newCode);
+            $stmt->execute();
+            
+            // Mark the message as read
+            $stmt2 = $conn->prepare("UPDATE admin_messages SET status = 'Read' WHERE id = ?");
+            $stmt2->bind_param("i", $msgId);
+            $stmt2->execute();
+            
+            header("Location: admin.php?success=Code $newCode generated and sent to $visitorEmail!");
+            exit();
+        }
+    }
 }
 
 if (isset($_GET['success'])) {
@@ -169,22 +203,30 @@ if ($resUsers) {
     }
 }
 
-// Forwarded Admin Messages
-$forwardedMessages = [];
-$resMessages = $conn->query("SELECT * FROM admin_messages WHERE subject LIKE '[FORWARDED by %' AND status = 'Unread' ORDER BY created_at DESC");
+// Fetch ALL Unread Messages (Code Requests, Direct Messages, and Forwarded Messages)
+$adminMessages = [];
+$resMessages = $conn->query("SELECT * FROM admin_messages WHERE status = 'Unread' ORDER BY created_at DESC");
 if ($resMessages) {
     while ($row = $resMessages->fetch_assoc()) {
         $row['formatted_date'] = (new DateTime($row['created_at']))->format('d M Y, g:ia');
-        
-        // Extract the Staff Name and Clean Subject using regex
-        $row['forwarded_by'] = "Staff";
         $row['clean_subject'] = $row['subject'];
+        $row['is_forwarded'] = false;
+        $row['is_code_request'] = false;
+        $row['forwarded_by'] = '';
+
+        // Check if it's a forwarded message
         if (preg_match('/\[FORWARDED by (.*?)\] (.*)/', $row['subject'], $matches)) {
+            $row['is_forwarded'] = true;
             $row['forwarded_by'] = $matches[1];
             $row['clean_subject'] = $matches[2];
         }
         
-        $forwardedMessages[] = $row;
+        // Check if it's a Code Request
+        if (strpos($row['clean_subject'], '[CODE REQUEST]') === 0) {
+            $row['is_code_request'] = true;
+        }
+        
+        $adminMessages[] = $row;
     }
 }
 
@@ -322,8 +364,8 @@ $conn->close();
             <button class="nav-btn" onclick="switchTab('tabUsers', this)">Users</button>
             <button class="nav-btn" onclick="switchTab('tabRequests', this)">
                 Requests
-                <?php if (count($forwardedMessages) > 0): ?>
-                    <span class="message-badge"><?php echo count($forwardedMessages); ?></span>
+                <?php if (count($adminMessages) > 0): ?>
+                    <span class="message-badge"><?php echo count($adminMessages); ?></span>
                 <?php endif; ?>
             </button>
         </div>
@@ -351,19 +393,28 @@ $conn->close();
                                 <p><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($evt['room']); ?></p>
                                 <span class="<?php echo $badgeClass; ?>"><i class="fa-solid fa-user-tie"></i> <?php echo htmlspecialchars($staffName); ?></span>
                             </div>
+                            
                             <div class="event-actions">
                                 <a href="admin_event.php?id=<?php echo (int)$evt['id']; ?>" class="event-action-btn" style="text-decoration:none;">
                                     <i class="fa-regular fa-pen-to-square"></i> Edit
                                 </a>
 
-                                <button class="event-action-btn assign-staff-btn" 
+                                <button class="event-action-btn assign-staff-btn" style="border-left: 1px solid #eee;"
                                     data-id="<?php echo $evt['id']; ?>" 
                                     data-title="<?php echo htmlspecialchars($evt['title'], ENT_QUOTES); ?>"
                                     data-staff="<?php echo $evt['assigned_staff_id']; ?>">
                                     <i class="fa-solid fa-user-plus"></i> Assign
                                 </button>
 
+                                <form action="admin.php" method="POST" style="margin: 0; display: flex; flex: 1; border-left: 1px solid #eee;" onsubmit="return confirm('Are you sure you want to delete this event? This action cannot be undone.');">
+                                    <input type="hidden" name="action" value="delete_event">
+                                    <input type="hidden" name="event_id" value="<?php echo $evt['id']; ?>">
+                                    <button type="submit" class="event-action-btn" style="color: #b02a37; width: 100%;">
+                                        <i class="fa-solid fa-trash"></i> Delete
+                                    </button>
+                                </form>
                             </div>
+
                         </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -404,28 +455,47 @@ $conn->close();
             <div class="admin-column">
                 <h2>Message Requests</h2>
                 <div class="message-list">
-                    <?php if (empty($forwardedMessages)): ?>
-                        <p style="color: #666; font-style: italic;">No forwarded messages to review.</p>
+                    <?php if (empty($adminMessages)): ?>
+                        <p style="color: #666; font-style: italic;">No messages or requests to review.</p>
                     <?php else: ?>
-                        <?php foreach ($forwardedMessages as $msg): ?>
-                            <div class="message-item">
+                        <?php foreach ($adminMessages as $msg): ?>
+                            <div class="message-item" style="<?php echo $msg['is_code_request'] ? 'border-left: 4px solid #198754;' : ''; ?>">
                                 <div class="message-item-header">
-                                    <span class="message-item-forwarder"><i class="fa-solid fa-share"></i> Fwd by: <?php echo htmlspecialchars($msg['forwarded_by']); ?></span>
+                                    <?php if ($msg['is_forwarded']): ?>
+                                        <span class="message-item-forwarder"><i class="fa-solid fa-share"></i> Fwd by: <?php echo htmlspecialchars($msg['forwarded_by']); ?></span>
+                                    <?php elseif ($msg['is_code_request']): ?>
+                                        <span class="message-item-forwarder" style="background:#198754; color:white;"><i class="fa-solid fa-key"></i> Code Request</span>
+                                    <?php else: ?>
+                                        <span class="message-item-forwarder" style="background:#e2e3e5; color:#333;"><i class="fa-solid fa-inbox"></i> Direct Message</span>
+                                    <?php endif; ?>
+                                    
                                     <span class="message-item-date"><?php echo htmlspecialchars($msg['formatted_date']); ?></span>
                                 </div>
                                 <span class="message-item-name"><?php echo htmlspecialchars($msg['sender_name']); ?></span>
                                 <span class="message-item-email"><?php echo htmlspecialchars($msg['sender_email']); ?></span>
                                 <div class="message-item-subject"><?php echo htmlspecialchars($msg['clean_subject']); ?></div>
                                 <div class="message-item-content">"<?php echo nl2br(htmlspecialchars($msg['content'])); ?>"</div>
+                                
                                 <div class="message-action-bar">
-                                    <button
-                                        type="button"
-                                        class="btn-reply"
-                                        onclick='openReplyMessageModal(<?php echo htmlspecialchars(json_encode($msg), ENT_QUOTES); ?>)'
-                                    >
-                                        <i class="fa-solid fa-reply"></i> Reply
-                                    </button>
-                                    <form action="admin.php" method="POST" style="margin-left: 10px;">
+                                    <?php if ($msg['is_code_request']): ?>
+                                        <form action="admin.php" method="POST">
+                                            <input type="hidden" name="action" value="generate_visitor_code">
+                                            <input type="hidden" name="message_id" value="<?php echo $msg['id']; ?>">
+                                            <input type="hidden" name="visitor_email" value="<?php echo htmlspecialchars($msg['sender_email']); ?>">
+                                            <button type="submit" class="btn-reply" style="background:#198754; color:white; margin-right: 10px;"><i class="fa-solid fa-key"></i> Generate & Send Code</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <button 
+                                            type="button" 
+                                            class="btn-reply" 
+                                            style="margin-right: 10px;"
+                                            onclick='openReplyMessageModal(<?php echo htmlspecialchars(json_encode($msg), ENT_QUOTES); ?>)'
+                                        >
+                                            <i class="fa-solid fa-reply"></i> Reply
+                                        </button>
+                                    <?php endif; ?>
+                                    
+                                    <form action="admin.php" method="POST" style="margin:0;">
                                         <input type="hidden" name="action" value="mark_message_read">
                                         <input type="hidden" name="message_id" value="<?php echo $msg['id']; ?>">
                                         <button type="submit" class="btn-mark-read"><i class="fa-solid fa-check"></i> Mark as Handled</button>
@@ -629,6 +699,15 @@ $conn->close();
                 window.history.replaceState({}, '', currentUrl.pathname);
             }
         }
+        // Auto-hide the alert box after 4 seconds
+        setTimeout(() => {
+            const alertBox = document.querySelector('.alert-box');
+            if (alertBox) {
+                alertBox.style.transition = 'opacity 0.5s ease';
+                alertBox.style.opacity = '0';
+                setTimeout(() => alertBox.remove(), 500); // Remove it from the HTML after it fades out
+            }
+        }, 4000);
     </script>
 </body>
 </html>
