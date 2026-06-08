@@ -1,3 +1,6 @@
+// the login page that confronts all users when they open the app
+// this does call the captcha so there's that
+
 <?php
 session_start();
 require_once "db.php";

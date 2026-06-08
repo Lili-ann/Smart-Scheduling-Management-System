@@ -1,3 +1,5 @@
+// this is the staff UI
+
 <?php
 session_start();
 require_once "db.php";

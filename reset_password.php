@@ -1,3 +1,5 @@
+// in case someone forgets their password lol
+
 <?php
 session_start();
 require_once "db.php";

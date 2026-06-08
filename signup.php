@@ -1,3 +1,5 @@
+// this should let you add someone to the admin or staff table in the database.
+
 <?php
 require_once "db.php";
 

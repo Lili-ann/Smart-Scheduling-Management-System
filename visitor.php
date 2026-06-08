@@ -1,3 +1,5 @@
+// this is the UI for the visitors since they have a different thing with the codes and all.
+
 <?php
 session_start();
 require_once "db.php";
