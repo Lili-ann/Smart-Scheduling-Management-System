@@ -1,3 +1,7 @@
+// this is the part that allows admin and staff roles to edit event details, upload images to the event gallery, and extend event times
+// it includes security checks to ensure that staff can only edit events assigned to them, and it handles file uploads
+// how? by validating file types and storing them in a designated directory which is in the dabatase
+
 <?php
 session_start();
 require_once "db.php";

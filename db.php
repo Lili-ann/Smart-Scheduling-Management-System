@@ -1,3 +1,5 @@
+// this is what connects the database to the rest of the application
+
 <?php
 $host = "localhost";
 $username = "root";

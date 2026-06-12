@@ -1,3 +1,5 @@
+// this is the events page that staff and visitors can access
+
 <?php
 session_start();
 require_once "db.php";

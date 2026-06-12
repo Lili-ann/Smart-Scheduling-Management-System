@@ -1,3 +1,5 @@
+// the like faux faq chat
+
 <?php
 // Make sure no extra spaces or HTML exist outside the PHP tags in this file!
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -1,3 +1,5 @@
+// this is just the admin UI lol
+
 <?php
 session_start();
 require_once "db.php";
