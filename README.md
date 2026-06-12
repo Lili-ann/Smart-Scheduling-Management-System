@@ -71,8 +71,6 @@ C:/xampp/htdocs/Scheduler
 - Import `scheduler.sql`
 - The import creates a database named `scheduler`
 
-```
-
 4. Open the application in your browser:
 
 ```text
